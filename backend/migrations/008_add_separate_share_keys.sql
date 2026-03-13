@@ -1,0 +1,3 @@
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS therapist_share_key VARCHAR(16) UNIQUE,
+  ADD COLUMN IF NOT EXISTS trusted_share_key   VARCHAR(16) UNIQUE;

@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Oswald', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-rose-50: #fff5f6;
+  --color-rose-100: #ffe0e6;
+  --color-rose-200: #ffc2d1;
+  --color-rose-300: #ff9db5;
+  --color-rose-400: #ff7096;
+  --color-rose-500: #e8507a;
+  --color-rose-600: #d63965;
+  --color-rose-700: #b82d54;
+  --color-rose-800: #9a2445;
+  --color-rose-900: #7a1d38;
+
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+}
+
+@layer base {
+  body {
+    @apply m-0 min-h-screen min-w-[320px] font-sans text-neutral-900 antialiased bg-white;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  h1, h2, h3 {
+    @apply m-0 font-heading;
+  }
+
+  p {
+    @apply m-0;
+  }
+}
+
+/* Google Sign-in button wrapper */
+#google-signin-button {
+  @apply mt-1;
+}
+
+/* Animations */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin 0.8s linear infinite;
+}
+
+.animate-pop {
+  animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.4s ease both;
+}
