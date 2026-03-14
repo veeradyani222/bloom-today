@@ -6,6 +6,7 @@ async function authMiddleware(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
 
+  
   if (!token) {
     console.warn(`[AUTH] missing_token method=${req.method} path=${req.path}`);
     return res.status(401).json({ error: 'Missing access token.' });
