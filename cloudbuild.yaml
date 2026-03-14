@@ -4,10 +4,10 @@ steps:
     args:
       - '-c'
       - |
+        echo "VITE_API_BASE_URL=https://bloom-563543181404.europe-west1.run.app" > frontend/.env
+        echo "VITE_GOOGLE_CLIENT_ID=563543181404-7fr2vgrj0fq8nn5bgd699if91d4af9vo.apps.googleusercontent.com" >> frontend/.env
+        echo "VITE_GEMINI_API_KEY=$$_VITE_GEMINI_API_KEY" >> frontend/.env
         docker build \
-          --build-arg VITE_API_BASE_URL=https://bloom-563543181404.europe-west1.run.app \
-          --build-arg VITE_GOOGLE_CLIENT_ID=563543181404-7fr2vgrj0fq8nn5bgd699if91d4af9vo.apps.googleusercontent.com \
-          --build-arg VITE_GEMINI_API_KEY=$$_VITE_GEMINI_API_KEY \
           -t europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend \
           -f frontend/Dockerfile \
           ./frontend
