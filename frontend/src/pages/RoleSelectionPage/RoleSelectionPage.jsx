@@ -34,6 +34,7 @@ export function RoleSelectionPage({
     : (session?.user?.preferred_dashboard_role || 'mom');
   const [selectedRole, setSelectedRole] = useState(initialRole);
   const [supportKey, setSupportKey] = useState('');
+  const [showSupportKeyStep, setShowSupportKeyStep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,13 +43,26 @@ export function RoleSelectionPage({
   useEffect(() => {
     if (DASHBOARD_ROLES.includes(roleFromQuery)) {
       setSelectedRole(roleFromQuery);
+      setShowSupportKeyStep(false);
       setError('');
     }
   }, [roleFromQuery]);
 
+  useEffect(() => {
+    if (selectedRole === 'mom') {
+      setShowSupportKeyStep(false);
+    }
+  }, [selectedRole]);
+
   async function handleContinue(event) {
     event.preventDefault();
     if (authMode) return;
+
+    if (selectedRole !== 'mom' && !showSupportKeyStep) {
+      setShowSupportKeyStep(true);
+      setError('');
+      return;
+    }
 
     if (selectedRole !== 'mom') {
       if (!supportKey.trim()) {
@@ -108,6 +122,11 @@ export function RoleSelectionPage({
 
   async function handleRoleCredential(credential) {
     if (!onRoleGoogleSignIn) return;
+    if (needsSupportKey && !showSupportKeyStep) {
+      setShowSupportKeyStep(true);
+      setError('');
+      return;
+    }
     if (needsSupportKey && !supportKey.trim()) {
       setError(`Enter your ${selectedRole} key to continue.`);
       return;
@@ -156,8 +175,8 @@ export function RoleSelectionPage({
 
   const helperTitle = authMode ? 'Choose how you want to sign in' : 'How do you want to use CalmNest?';
   const helperSubtitle = authMode
-    ? 'Pick your role, enter your key if needed, then continue with Google.'
-    : 'Choose your role. If you pick therapist or trusted, enter the support key and continue.';
+    ? 'Pick your role first. If you choose therapist or trusted person, you will enter the key in the next step.'
+    : 'Choose your role first. Therapist and trusted person keys are asked in the next step.';
 
   return (
     <main className="rsp">
@@ -194,6 +213,67 @@ export function RoleSelectionPage({
             </div>
           </form>
         ) : (
+          showSupportKeyStep && needsSupportKey ? (
+            <form onSubmit={handleContinue}>
+              <div className="rsp-key-wrap">
+                <label htmlFor="support-role-key" className="rsp-key-label">
+                  {selectedRole === 'therapist' ? 'Therapist key' : 'Trusted person key'}
+                </label>
+                <input
+                  id="support-role-key"
+                  className="rsp-key-input"
+                  value={supportKey}
+                  onChange={(event) => setSupportKey(event.target.value.toUpperCase())}
+                  placeholder="Enter your key"
+                  autoComplete="off"
+                  autoFocus
+                />
+                <p className="rsp-key-hint">This key is shared by the new mom. After key check, you will directly enter the support dashboard.</p>
+              </div>
+
+              {error || externalError ? <p className="rsp-error">{error || externalError}</p> : null}
+
+              <div className="rsp-actions">
+                {!authMode ? (
+                  <>
+                    <button
+                      type="submit"
+                      className="rsp-continue-btn"
+                      disabled={saving}
+                    >
+                      {saving ? 'Saving...' : 'Continue'}
+                    </button>
+                    <button
+                      type="button"
+                      className="rsp-back-btn"
+                      onClick={() => {
+                        setShowSupportKeyStep(false);
+                        setError('');
+                      }}
+                    >
+                      Back to role selection
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="rsp-google-wrap">
+                      <GoogleButton onCredential={handleRoleCredential} disabled={loading} />
+                    </div>
+                    <button
+                      type="button"
+                      className="rsp-back-btn"
+                      onClick={() => {
+                        setShowSupportKeyStep(false);
+                        setError('');
+                      }}
+                    >
+                      Back to role selection
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+          ) : (
           <form onSubmit={handleContinue}>
             <div className="rsp-roles">
               {DASHBOARD_ROLES.map((role, index) => {
@@ -231,23 +311,6 @@ export function RoleSelectionPage({
               })}
             </div>
 
-            {needsSupportKey ? (
-              <div className="rsp-key-wrap">
-                <label htmlFor="support-role-key" className="rsp-key-label">
-                  {selectedRole === 'therapist' ? 'Therapist key' : 'Trusted person key'}
-                </label>
-                <input
-                  id="support-role-key"
-                  className="rsp-key-input"
-                  value={supportKey}
-                  onChange={(event) => setSupportKey(event.target.value.toUpperCase())}
-                  placeholder="Enter your key"
-                  autoComplete="off"
-                />
-                <p className="rsp-key-hint">This key is shared by the new mom. After key check, you will directly enter the support dashboard.</p>
-              </div>
-            ) : null}
-
             {error || externalError ? <p className="rsp-error">{error || externalError}</p> : null}
 
             <div className="rsp-actions">
@@ -269,12 +332,27 @@ export function RoleSelectionPage({
                   </button>
                 </>
               ) : (
-                <div className="rsp-google-wrap">
-                  <GoogleButton onCredential={handleRoleCredential} disabled={loading} />
-                </div>
+                needsSupportKey ? (
+                  <button
+                    type="button"
+                    className="rsp-continue-btn"
+                    onClick={() => {
+                      setShowSupportKeyStep(true);
+                      setError('');
+                    }}
+                    disabled={loading}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <div className="rsp-google-wrap">
+                    <GoogleButton onCredential={handleRoleCredential} disabled={loading} />
+                  </div>
+                )
               )}
             </div>
           </form>
+          )
         )}
       </div>
     </main>

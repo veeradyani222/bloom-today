@@ -58,6 +58,10 @@ export function OverviewActionsSection({ companionName = 'Sage', illustration })
 
   function handleCallSelect(path) {
     setShowCallMenu(false);
+    if (path === '/video-call') {
+      navigate(path, { state: { autostartVideo: true } });
+      return;
+    }
     navigate(path);
   }
 

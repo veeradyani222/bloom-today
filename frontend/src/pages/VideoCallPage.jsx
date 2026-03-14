@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, ChevronLeft, Video, VideoOff } from 'lucide-react';
 import { useVideoCall } from '../hooks/useVideoCall';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
@@ -20,7 +20,9 @@ function isLikelyIOSSafari() {
 
 export function VideoCallPage({ token, session }) {
   const navigate = useNavigate();
-  const [requiresTapToStart] = useState(() => isLikelyIOSSafari());
+  const location = useLocation();
+  const autoStartRequested = Boolean(location.state?.autostartVideo);
+  const [requiresTapToStart] = useState(() => isLikelyIOSSafari() && !autoStartRequested);
 
   const companionName = session?.user?.companion_name || session?.user?.companionName || 'Companion';
   const companionVoiceName = session?.user?.companion_voice || session?.user?.companionVoice || 'Aoede';
@@ -310,8 +312,8 @@ export function VideoCallPage({ token, session }) {
             </button>
           )}
           {requiresTapToStart && !startedRef.current && callState === 'idle' && (
-            <button className="vcall-error-retry" onClick={handleStartCallTap} style={{ marginTop: '16px' }}>
-              Tap to Start Call
+            <button className="vcall-start-cta" onClick={handleStartCallTap}>
+              Start Video Call
             </button>
           )}
         </div>

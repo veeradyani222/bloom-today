@@ -180,7 +180,7 @@ export function VoiceCallPage({ token, session }) {
 
   function handleSwitchToVideo() {
     endCall();
-    navigate('/video-call', { replace: true });
+    navigate('/video-call', { replace: true, state: { autostartVideo: true } });
   }
 
   function handleRetry() {

@@ -13,6 +13,12 @@ import './OnboardingPage.css';
 
 const DEFAULT_GEMINI_VOICE = 'Aoede';
 
+function maskSupportKey(value) {
+  if (!value) return 'Unavailable';
+  if (value.length <= 8) return '•'.repeat(value.length);
+  return `${value.slice(0, 4)}${'•'.repeat(Math.max(4, value.length - 8))}${value.slice(-4)}`;
+}
+
 function getCompanionConfig(session) {
   return {
     avatarId: session?.user?.companion?.avatar_id || session?.user?.companion_avatar_id || 'brunette',
@@ -23,12 +29,43 @@ function getCompanionConfig(session) {
 }
 
 function SupportKeyCard({ title, description, keyValue, onRotate, rotating }) {
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  async function copyKey() {
+    if (!keyValue) return;
+    try {
+      await navigator.clipboard.writeText(keyValue);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <article className="you-key-card">
       <div>
         <h3>{title}</h3>
         <p>{description}</p>
-        <code>{keyValue || 'Unavailable'}</code>
+        <button
+          type="button"
+          className={`you-key-copy ${copied ? 'is-copied' : ''}`}
+          onClick={copyKey}
+          disabled={!keyValue}
+          title={keyValue ? 'Click to copy key' : 'No key available'}
+        >
+          <code>{revealed ? keyValue : maskSupportKey(keyValue)}</code>
+          <span>{copied ? 'Copied' : 'Click to copy'}</span>
+        </button>
+        <button
+          type="button"
+          className="you-key-toggle"
+          onClick={() => setRevealed((prev) => !prev)}
+          disabled={!keyValue}
+        >
+          {revealed ? 'Hide key' : 'Show key'}
+        </button>
       </div>
       <button type="button" className="you-key-rotate" onClick={onRotate} disabled={rotating}>
         {rotating ? 'Rotating...' : 'Rotate key'}

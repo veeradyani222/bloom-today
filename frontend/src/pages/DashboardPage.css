@@ -769,15 +769,67 @@
 }
 .you-key-card h3 { margin: 0 0 6px; font-size: 0.95rem; font-family: var(--font-h); }
 .you-key-card p { margin: 0 0 10px; color: var(--muted); font-size: 0.82rem; line-height: 1.5; max-width: 520px; }
-.you-key-card code {
-  display: inline-block;
-  padding: 7px 10px;
-  border-radius: 10px;
+.you-key-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   border: 1px dashed rgba(128, 24, 59, 0.35);
   background: rgba(128, 24, 59, 0.04);
+  border-radius: 10px;
+  padding: 7px 10px;
+  color: inherit;
+  cursor: pointer;
+}
+.you-key-copy code {
   font-size: 0.82rem;
   letter-spacing: 0.08em;
   font-weight: 700;
+}
+.you-key-copy span {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.you-key-copy:hover {
+  border-color: rgba(128, 24, 59, 0.5);
+  background: rgba(128, 24, 59, 0.08);
+}
+.you-key-copy:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(128, 24, 59, 0.15);
+}
+.you-key-copy:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.you-key-copy.is-copied {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: rgba(15, 118, 110, 0.08);
+}
+.you-key-copy.is-copied span {
+  color: #0f766e;
+}
+.you-key-toggle {
+  margin-left: 10px;
+  border: 1px solid rgba(128, 24, 59, 0.25);
+  background: #fff;
+  color: #80183b;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.you-key-toggle:hover {
+  background: rgba(128, 24, 59, 0.06);
+}
+.you-key-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .you-key-rotate {
   align-self: center;

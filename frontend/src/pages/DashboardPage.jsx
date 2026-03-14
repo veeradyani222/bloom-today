@@ -497,11 +497,11 @@ export function Navbar({ companionName = 'your companion', role = 'mom' }) {
               </button>
             ) : null}
             {role === 'mom' ? <button type="button" className="dash-call-btn" onClick={() => navigate('/call')}><Phone size={16} /> Call</button> : null}
-            {role === 'mom' ? <button type="button" className="dash-call-btn" onClick={() => navigate('/video-call')}><Video size={16} /> Video</button> : null}
+            {role === 'mom' ? <button type="button" className="dash-call-btn" onClick={() => navigate('/video-call', { state: { autostartVideo: true } })}><Video size={16} /> Video</button> : null}
           </div>
           <div className="dash-mobile-actions">
             {role === 'mom' ? <button type="button" className="dash-call-icon-btn" onClick={() => navigate('/call')}><Phone size={18} /></button> : null}
-            {role === 'mom' ? <button type="button" className="dash-call-icon-btn" onClick={() => navigate('/video-call')}><Video size={18} /></button> : null}
+            {role === 'mom' ? <button type="button" className="dash-call-icon-btn" onClick={() => navigate('/video-call', { state: { autostartVideo: true } })}><Video size={18} /></button> : null}
           </div>
         </div>
       </header>
@@ -1467,7 +1467,7 @@ function OverviewQuickActions() {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/video-call')}
+              onClick={() => navigate('/video-call', { state: { autostartVideo: true } })}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
                 padding: '16px', borderRadius: '16px', background: 'var(--card)', color: 'var(--ink)',
