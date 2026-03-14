@@ -4,6 +4,7 @@ const { pool } = require('../db');
 
 const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 const ANALYSIS_MODEL = process.env.GEMINI_ANALYSIS_MODEL || config.geminiModel;
+const ANALYSIS_FALLBACK_MODEL = process.env.GEMINI_ANALYSIS_FALLBACK_MODEL || '';
 const DEFAULT_TIMEZONE = process.env.DASHBOARD_TIMEZONE || 'Asia/Kolkata';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -371,6 +372,217 @@ const quickTipsSchema = {
   },
 };
 
+const resourceRecommendationsSchema = {
+  type: Type.OBJECT,
+  required: ['summary', 'resources'],
+  properties: {
+    summary: { type: Type.STRING },
+    resources: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ['title', 'reason', 'youtubeUrl'],
+        properties: {
+          title: { type: Type.STRING },
+          reason: { type: Type.STRING },
+          youtubeUrl: { type: Type.STRING },
+        },
+      },
+    },
+  },
+};
+
+function extractYouTubeVideoId(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+
+    if (host.includes('youtu.be')) {
+      return url.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    }
+
+    if (host.includes('youtube.com') || host.includes('youtube-nocookie.com')) {
+      if (url.pathname === '/watch') {
+        return url.searchParams.get('v') || '';
+      }
+
+      const parts = url.pathname.split('/').filter(Boolean);
+      const embedIndex = parts.findIndex((part) => part === 'embed' || part === 'shorts' || part === 'live');
+      if (embedIndex >= 0 && parts[embedIndex + 1]) {
+        return parts[embedIndex + 1];
+      }
+    }
+  } catch {
+    // noop
+  }
+
+  const watchMatch = raw.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+  if (watchMatch?.[1]) return watchMatch[1];
+
+  const shortMatch = raw.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+  if (shortMatch?.[1]) return shortMatch[1];
+
+  return '';
+}
+
+function normalizeYouTubeVideoId(videoId) {
+  const normalized = String(videoId || '').trim();
+  if (!/^[a-zA-Z0-9_-]{6,}$/.test(normalized)) return '';
+  return normalized;
+}
+
+function buildYouTubeWatchUrl(videoId) {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function buildYouTubeEmbedUrl(videoId) {
+  return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
+}
+
+function buildFallbackResourceRecommendations() {
+  const fallback = [
+    {
+      title: '4-7-8 Breathing for Stress Relief',
+      reason: 'A short guided breathing exercise can lower stress quickly when your nervous system feels overloaded.',
+      videoId: '1Dv-ldGLnIY',
+    },
+    {
+      title: 'Postpartum Pelvic Floor Basics',
+      reason: 'A gentle recovery routine can help if your body feels tense, sore, or heavy during postpartum healing.',
+      videoId: 'Qvm1OYkvYOo',
+    },
+    {
+      title: '5 Minute Mindfulness Meditation',
+      reason: 'A quick reset can help when your mind keeps racing and you need a steadier moment.',
+      videoId: 'inpok4MKVLM',
+    },
+    {
+      title: 'Gentle Neck and Shoulder Release',
+      reason: 'This can ease upper-body tension that often builds up after long feeding and carrying sessions.',
+      videoId: 'SedzswEwpPw',
+    },
+  ];
+
+  return {
+    summary: 'These picks are practical resets you can try right away on harder days.',
+    resources: fallback.map((item) => ({
+      title: item.title,
+      reason: item.reason,
+      youtubeUrl: buildYouTubeWatchUrl(item.videoId),
+      embedUrl: buildYouTubeEmbedUrl(item.videoId),
+      videoId: item.videoId,
+    })),
+  };
+}
+
+function normalizeResourceRecommendations(raw, fallback) {
+  const rawItems = Array.isArray(raw?.resources) ? raw.resources : [];
+  const normalizedResources = (raw?.resources || [])
+    .map((item) => {
+      const detectedVideoId = normalizeYouTubeVideoId(extractYouTubeVideoId(item?.youtubeUrl));
+      if (!detectedVideoId) return null;
+
+      return {
+        title: String(item?.title || '').trim().slice(0, 120),
+        reason: String(item?.reason || '').trim().slice(0, 260),
+        youtubeUrl: buildYouTubeWatchUrl(detectedVideoId),
+        embedUrl: buildYouTubeEmbedUrl(detectedVideoId),
+        videoId: detectedVideoId,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const droppedCount = Math.max(0, rawItems.length - normalizedResources.length);
+  console.log(
+    `[DASHBOARD] resources_normalization raw=${rawItems.length} normalized=${normalizedResources.length} dropped=${droppedCount}`,
+  );
+  if (droppedCount > 0) {
+    const badUrls = rawItems
+      .map((item) => String(item?.youtubeUrl || '').trim())
+      .filter((url) => !normalizeYouTubeVideoId(extractYouTubeVideoId(url)))
+      .slice(0, 6);
+    console.warn('[DASHBOARD] resources_invalid_urls', badUrls);
+  }
+
+  return {
+    summary: String(raw?.summary || fallback.summary || '').trim() || fallback.summary,
+    // Keep only normalized AI resources here; fallback is merged later with clearer source accounting.
+    resources: normalizedResources,
+  };
+}
+
+function isDefinitiveUnembeddableStatus(status) {
+  return [401, 403, 404, 410].includes(Number(status));
+}
+
+async function isYouTubeVideoEmbeddable(videoId) {
+  if (!videoId) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(buildYouTubeWatchUrl(videoId))}&format=json`;
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      // 4xx like 403/404 generally indicates a truly unembeddable or unavailable video.
+      if (isDefinitiveUnembeddableStatus(response.status)) {
+        return false;
+      }
+      // Network edge and transient upstream failures should not disqualify otherwise valid AI links.
+      return null;
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!payload) return null;
+    return Boolean(payload?.title);
+  } catch {
+    // Treat request failure as unknown embeddability instead of invalid.
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function keepEmbeddableResources(resources = []) {
+  const checked = await Promise.all(
+    (resources || []).map(async (item) => {
+      const embeddable = await isYouTubeVideoEmbeddable(item.videoId);
+      return { item, embeddable };
+    }),
+  );
+
+  const valid = checked
+    .filter((entry) => entry.embeddable !== false)
+    .map((entry) => entry.item);
+  const confirmed = checked.filter((entry) => entry.embeddable === true).length;
+  const unknown = checked.filter((entry) => entry.embeddable === null).length;
+  const invalid = checked.filter((entry) => entry.embeddable === false).map((entry) => entry.item.videoId);
+
+  console.log(
+    `[DASHBOARD] resources_embed_check kept=${valid.length} confirmed=${confirmed} unknown=${unknown} invalid=${invalid.length}`,
+  );
+  if (unknown > 0) {
+    console.warn('[DASHBOARD] resources_embed_check_partial_validation', {
+      unknown,
+      note: 'oEmbed validation unavailable for some videos; preserving candidates.',
+    });
+  }
+  if (invalid.length) {
+    console.warn('[DASHBOARD] resources_unembeddable_video_ids', invalid);
+  }
+
+  return valid;
+}
+
 async function getDashboardSourceData({ userId }) {
   const userRes = await pool.query(
     `
@@ -499,23 +711,63 @@ function normalizeQuickTips(raw, fallback) {
   };
 }
 
-async function generateStructuredJson({ prompt, schema }) {
-  const response = await ai.models.generateContent({
-    model: ANALYSIS_MODEL,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: schema,
-      temperature: 0.3,
-    },
-  });
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  const rawText = getResponseText(response);
-  const parsed = safeJsonParse(rawText);
-  if (!parsed) {
-    throw new Error('Gemini did not return valid JSON.');
+function getErrorStatus(error) {
+  return Number(error?.status || error?.error?.code || 0);
+}
+
+function isRetryableGeminiError(error) {
+  const status = getErrorStatus(error);
+  if ([429, 500, 502, 503, 504].includes(status)) return true;
+
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('high demand')
+    || message.includes('unavailable')
+    || message.includes('try again later')
+    || message.includes('temporar')
+    || message.includes('timeout');
+}
+
+async function generateStructuredJson({ prompt, schema, label = 'structured-json', maxRetries = 3 }) {
+  const modelCandidates = [ANALYSIS_MODEL, ANALYSIS_FALLBACK_MODEL].filter(Boolean);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const model = modelCandidates[Math.min(attempt, modelCandidates.length - 1)] || ANALYSIS_MODEL;
+
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          temperature: 0.3,
+        },
+      });
+
+      const rawText = getResponseText(response);
+      const parsed = safeJsonParse(rawText);
+      if (!parsed) {
+        throw new Error('Gemini did not return valid JSON.');
+      }
+      return parsed;
+    } catch (error) {
+      const retryable = isRetryableGeminiError(error);
+      const canRetry = retryable && attempt < maxRetries;
+      if (!canRetry) throw error;
+
+      const delayMs = (700 * (2 ** attempt)) + Math.floor(Math.random() * 300);
+      console.warn(
+        `[DASHBOARD] gemini_retry label=${label} model=${model} attempt=${attempt + 1}/${maxRetries + 1} delayMs=${delayMs} status=${getErrorStatus(error) || 'n/a'}`,
+      );
+      await wait(delayMs);
+    }
   }
-  return parsed;
+
+  throw new Error('Gemini retries exhausted.');
 }
 
 async function analyzeCallSession({ callId, userId }) {
@@ -561,6 +813,7 @@ You are analyzing a completed postpartum support companion call for product insi
 Important rules:
 - Base every conclusion only on this call transcript and the provided intake context.
 - Be supportive and non-diagnostic in the mom-facing fields.
+- momReflection fields (headline, encouragement, nextStep) must ALWAYS address the user in second person ("you", "your", "you're"). Never use third person ("she", "her", "they") in momReflection — even mid-sentence.
 - Keep therapist-facing fields practical, plain-language, and non-diagnostic.
 - If evidence is weak, stay conservative.
 - Scores must be integers from 0 to 100.
@@ -580,7 +833,12 @@ Transcript:
 ${transcriptText}
 `.trim();
 
-  const rawAnalysis = await generateStructuredJson({ prompt, schema: callAnalysisSchema });
+  const rawAnalysis = await generateStructuredJson({
+    prompt,
+    schema: callAnalysisSchema,
+    label: 'call-analysis',
+    maxRetries: 3,
+  });
   const analysis = normalizeCallAnalysis(rawAnalysis, session);
 
   await pool.query(
@@ -716,6 +974,7 @@ You are creating dashboard narratives for a postpartum support app.
 
 Rules:
 - Mom copy must be warm, affirming, and never diagnostic.
+- Mom copy must ALWAYS address the user in second person ("you", "your", "you're"). Never use third person ("she", "her", "they") when writing for the mom audience — even mid-sentence.
 - Therapist copy must be concise, clear, and practical in everyday language.
 - Trusted person copy must be plain-language, compassionate, and action-oriented.
 - Base everything only on the provided analyzed call summaries.
@@ -727,7 +986,12 @@ Analyzed calls:
 ${JSON.stringify(rows)}
 `.trim();
 
-  return generateStructuredJson({ prompt, schema: rollupSchema });
+  return generateStructuredJson({
+    prompt,
+    schema: rollupSchema,
+    label: 'rollup-narratives',
+    maxRetries: 3,
+  });
 }
 
 async function getContextualQuickTips({ userId, timeZone = DEFAULT_TIMEZONE }) {
@@ -796,7 +1060,12 @@ Respond as JSON with:
 `.trim();
 
   try {
-    const generated = await generateStructuredJson({ prompt, schema: quickTipsSchema });
+    const generated = await generateStructuredJson({
+      prompt,
+      schema: quickTipsSchema,
+      label: 'quick-tips',
+      maxRetries: 4,
+    });
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -805,6 +1074,109 @@ Respond as JSON with:
     };
   } catch (error) {
     console.error('[DASHBOARD] quick_tips_generation_error', error);
+    return {
+      generatedAt: new Date().toISOString(),
+      timeZone,
+      source: 'fallback',
+      ...fallback,
+    };
+  }
+}
+
+async function getConversationResourceRecommendations({ user, analyses, timeZone = DEFAULT_TIMEZONE }) {
+  const fallback = buildFallbackResourceRecommendations();
+
+  if (!analyses.length) {
+    console.log('[DASHBOARD] resources_fallback reason=no_analyses');
+    return {
+      generatedAt: new Date().toISOString(),
+      timeZone,
+      source: 'fallback',
+      ...fallback,
+    };
+  }
+
+  const now = Date.now();
+  const weekly = analyses.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= 7 * DAY_MS);
+  const latest = analyses[0]?.analysis || null;
+  const weekRollup = aggregateWindow(weekly);
+
+  const prompt = `
+You are selecting YouTube resources for a supportive wellness app, personalized from conversation analysis.
+
+Rules:
+- Return exactly 4 resources.
+- Every resource must be a real YouTube URL using this format: https://www.youtube.com/watch?v=VIDEO_ID
+- No playlists, channels, shorts pages, or non-YouTube domains.
+- Prioritize practical, gentle, non-diagnostic support content for postpartum stress, sleep, recovery, emotional regulation, and support seeking.
+- Avoid sensational, shaming, or fear-based content.
+- title must be short and clear.
+- reason must be one sentence explaining why this resource fits her recent conversation signals.
+- Base your recommendations only on the provided data.
+
+User: ${user.full_name || 'Mom'}
+Timezone: ${timeZone}
+Latest analysis:
+${JSON.stringify(latest ? {
+  overallEmotionalTone: latest.overallEmotionalTone,
+  moodDirection: latest.moodDirection,
+  signalScores: latest.signalScores,
+  themes: latest.themes,
+  observations: latest.observations,
+  risk: latest.risk,
+  momReflection: latest.momReflection,
+} : null)}
+
+This week rollup:
+${JSON.stringify(weekRollup)}
+
+Respond as JSON with:
+- summary: one short sentence for why these resources were chosen
+- resources: array of 4 objects with title, reason, youtubeUrl
+`.trim();
+
+  try {
+    const generated = await generateStructuredJson({
+      prompt,
+      schema: resourceRecommendationsSchema,
+      label: 'resources',
+      maxRetries: 4,
+    });
+    const generatedCount = Array.isArray(generated?.resources) ? generated.resources.length : 0;
+    console.log(`[DASHBOARD] resources_ai_generated count=${generatedCount}`);
+
+    if (!generatedCount) {
+      console.warn('[DASHBOARD] resources_ai_empty_payload', generated);
+    }
+
+    const normalized = normalizeResourceRecommendations(generated, fallback);
+    const validatedAi = await keepEmbeddableResources(normalized.resources);
+    const fallbackFill = fallback.resources.filter(
+      (item) => !validatedAi.some((aiItem) => aiItem.videoId === item.videoId),
+    );
+    const finalResources = [...validatedAi, ...fallbackFill].slice(0, 4);
+
+    if (!finalResources.length) {
+      console.warn('[DASHBOARD] resources_fallback reason=no_normalized_resources');
+    } else if (!validatedAi.length) {
+      console.warn('[DASHBOARD] resources_fallback reason=all_ai_urls_invalid_or_unembeddable');
+    } else if (validatedAi.length < 4) {
+      console.log(`[DASHBOARD] resources_partial_ai ai=${validatedAi.length} fallback_fill=${4 - validatedAi.length}`);
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      timeZone,
+      source: validatedAi.length ? 'ai' : 'fallback',
+      summary: normalized.summary,
+      resources: finalResources,
+    };
+  } catch (error) {
+    console.error('[DASHBOARD] resources_generation_error', {
+      message: error?.message,
+      stack: error?.stack,
+    });
+    console.log('[DASHBOARD] resources_fallback reason=generation_error');
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -842,6 +1214,18 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
     }
   }
 
+  let resources = {
+    generatedAt: new Date().toISOString(),
+    timeZone,
+    source: 'none',
+    summary: '',
+    resources: [],
+  };
+
+  if ((role || user.preferred_dashboard_role || 'mom') === 'mom') {
+    resources = await getConversationResourceRecommendations({ user, analyses, timeZone });
+  }
+
   return {
     role: role || user.preferred_dashboard_role || 'mom',
     generatedAt: new Date().toISOString(),
@@ -861,6 +1245,7 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
       week: rollups.week,
       month: rollups.month,
       trendPoints,
+      resources,
     },
     therapist: {
       narratives: narratives?.therapist || null,

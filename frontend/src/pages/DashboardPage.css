@@ -34,7 +34,7 @@
 .dash-desktop-actions { display: none; align-items: center; gap: 6px; }
 .dash-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--stroke); background: var(--card); border-radius: 999px; padding: 8px 14px; color: var(--muted); font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; }
 .dash-pill:hover { color: var(--ink); border-color: rgba(0,0,0,0.12); }
-.dash-pill.active { color: var(--ink); border-color: rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.dash-pill.active { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .dash-call-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; }
 .dash-call-btn:hover { background: var(--ink); color: #fff; }
 
@@ -44,7 +44,7 @@
 
 .dash-navbar-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; display: flex; justify-content: space-around; align-items: center; padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); background: rgba(255,255,255,0.94); backdrop-filter: blur(16px); border-top: 1px solid var(--stroke); }
 .dash-nav-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 60px; border: none; background: transparent; color: var(--muted); padding: 8px 12px; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-.dash-nav-btn.active { color: var(--pink); background: var(--pink-light); }
+.dash-nav-btn.active { color: #fff; background: var(--ink); }
 .dash-nav-btn span { font-size: 0.64rem; letter-spacing: 0.02em; }
 
 .dash-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 100px; }
@@ -298,7 +298,7 @@
 .sec-timeline-art { width: 80px; height: 70px; object-fit: contain; flex-shrink: 0; }
 .sec-timeline-head h3 { font-family: var(--font-h); font-size: 1.1rem; font-weight: 600; margin: 0 0 2px; color: var(--violet); }
 .sec-timeline-head p { margin: 0; font-size: 0.82rem; color: var(--muted); }
-.sec-timeline-list { display: flex; flex-direction: column; gap: 0; border-left: 2px solid rgba(139,92,246,0.2); margin-left: 12px; padding-left: 20px; }
+.sec-timeline-list { display: flex; flex-direction: column; gap: 0; margin-left: 12px; padding-left: 20px; }
 .sec-timeline-item { position: relative; padding: 10px 0; }
 .sec-timeline-item p { margin: 0; line-height: 1.6; font-size: 0.88rem; }
 .sec-timeline-dot { position: absolute; left: -28px; top: 14px; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
@@ -415,6 +415,105 @@
 .sec-tips-nav-btn:hover:not(:disabled) { background: #1d4ed8; color: #ffffff; }
 .sec-tips-nav-btn:disabled { opacity: 0.35; cursor: default; }
 
+/* ═══ 14.5 RESOURCES ═══ */
+.sec-resources {
+  margin-bottom: 16px;
+  padding: 22px 24px;
+  border-radius: 24px;
+  border: none;
+  background: #ecfeff;
+  box-shadow: 0 12px 30px rgba(14, 116, 144, 0.1);
+}
+
+.sec-resources-head {
+  margin-bottom: 14px;
+}
+
+.sec-resources-head h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-h);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #155e75;
+}
+
+.sec-resources-head p {
+  margin: 0;
+  color: #0f766e;
+  line-height: 1.55;
+  font-size: 0.86rem;
+}
+
+.sec-resources-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sec-resource-card {
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(14, 116, 144, 0.16);
+  overflow: hidden;
+  box-shadow: 0 10px 22px rgba(14, 116, 144, 0.08);
+}
+
+.sec-resource-video-wrap {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #cffafe;
+}
+
+.sec-resource-video {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.sec-resource-copy {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sec-resource-copy h4 {
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.35;
+  color: #164e63;
+  font-weight: 700;
+}
+
+.sec-resource-copy p {
+  margin: 0;
+  color: #0f766e;
+  line-height: 1.55;
+  font-size: 0.85rem;
+}
+
+.sec-resource-link {
+  appearance: none;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: #0f766e;
+  background: #ccfbf1;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: var(--font-b);
+  cursor: pointer;
+}
+
+.sec-resource-link:hover {
+  background: #99f6e4;
+}
+
 /* ═══ 15. ENCOURAGEMENT (violet card) ═══ */
 .sec-encourage { margin-bottom: 16px; cursor: pointer; display: flex; align-items: center; gap: 20px; padding: 22px 24px; border-radius: var(--radius); background: var(--violet); color: #fff; overflow: hidden; transition: box-shadow 0.15s; }
 .sec-encourage:hover { box-shadow: 0 8px 28px rgba(139,92,246,0.25); }
@@ -447,6 +546,10 @@
   .sec-calendar-grid {
     max-width: 420px;
     margin-inline: auto;
+  }
+
+  .sec-resources-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

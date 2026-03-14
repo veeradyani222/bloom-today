@@ -5,6 +5,7 @@ import { OverviewBloomNoteSection } from './OverviewBloomNoteSection';
 import { OverviewCommunitySection } from './OverviewCommunitySection';
 import { OverviewHeroSection } from './OverviewHeroSection';
 import { OverviewMoodSection } from './OverviewMoodSection';
+import { OverviewResourcesSection } from './OverviewResourcesSection';
 import { OverviewScoreSection } from './OverviewScoreSection';
 import { OverviewEmptyState } from './OverviewStates';
 
@@ -38,6 +39,7 @@ function MomOverviewContent({
       />
       <OverviewActionsSection companionName={companionName} illustration={jumpBackIllustration} />
       <QuickTips scores={current?.signalScores} tips={quickTips?.tips} summary={quickTips?.summary} />
+      <OverviewResourcesSection resources={data?.resources} />
       <OverviewMoodSection current={current} daySeries={daySeries} insights={insights} />
       <OverviewCommunitySection momTips={momTips} />
       <OverviewBloomNoteSection data={data} current={current} firstName={firstName} />

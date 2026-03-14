@@ -224,7 +224,7 @@ export function VideoCallPage({ token, session }) {
 
 
   const statusText = isConnecting
-    ? 'Waiting for YOU to join the call'
+    ? 'Waiting for you to join the call'
     : isConnected
       ? formattedDuration
       : callState === 'error'

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
 
 const dashboardCache = new Map();
+const DASHBOARD_CACHE_VERSION = 'v2-resources-embed-check';
 
 function buildCacheKey(token, role) {
-  return `${token || 'anon'}::${role || 'mom'}`;
+  return `${DASHBOARD_CACHE_VERSION}::${token || 'anon'}::${role || 'mom'}`;
 }
 
 export function useDashboardData(token, role = 'mom') {
@@ -36,6 +37,14 @@ export function useDashboardData(token, role = 'mom') {
           apiRequest(`/api/dashboard/insights?timeZone=${encodeURIComponent(tz)}`, { token }),
           apiRequest(`/api/dashboard/day-points?timeZone=${encodeURIComponent(tz)}`, { token }),
         ]);
+
+        if (role === 'mom') {
+          const resourceCount = nextInsights?.mom?.resources?.resources?.length || 0;
+          console.log('[DASHBOARD_UI] resources_payload', {
+            source: nextInsights?.mom?.resources?.source,
+            resourceCount,
+          });
+        }
 
         const nextCore = {
           insights: nextInsights,
