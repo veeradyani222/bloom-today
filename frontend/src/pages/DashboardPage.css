@@ -16,8 +16,8 @@
   --purple: #a855f7;
   --purple-light: #faf5ff;
   --fuchsia: #d946ef;
-  --font-h: 'Oswald', sans-serif;
-  --font-b: 'Inter', sans-serif;
+  --font-h: var(--font-heading);
+  --font-b: var(--font-sans);
 }
 
 /* ═══ BASE ═══ */
