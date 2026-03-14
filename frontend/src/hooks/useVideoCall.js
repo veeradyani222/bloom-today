@@ -10,6 +10,7 @@ import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
+import { requestMediaPermissions } from '../lib/mediaPermissions';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-native-audio-latest';
 
@@ -98,6 +99,7 @@ export function useVideoCall({
   const clientRef = useRef(null);
   const recorderRef = useRef(null);
   const streamerRef = useRef(null);
+  const micPreflightStreamRef = useRef(null);
   const shouldSendGreetingRef = useRef(false);
   const greetingSentRef = useRef(false);
   const intentionalHangupRef = useRef(false);
@@ -243,7 +245,9 @@ export function useVideoCall({
       }
     });
 
-    await recorder.start();
+    const preflightMicStream = micPreflightStreamRef.current;
+    micPreflightStreamRef.current = null;
+    await recorder.start(preflightMicStream ? { stream: preflightMicStream } : undefined);
   }, [isConnected, muted]);
 
   /* ── Webcam management ── */
@@ -257,6 +261,22 @@ export function useVideoCall({
       videoStreamRef.current = null;
     }
   }, []);
+
+  const useExistingWebcamStream = useCallback(async (stream) => {
+    const videoTracks = stream?.getVideoTracks() || [];
+    if (!videoTracks.length) {
+      throw new Error('Camera permission was granted, but no camera track is available.');
+    }
+
+    if (videoStreamRef.current && videoStreamRef.current !== stream) {
+      videoStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    videoTracks.forEach((track) => { track.enabled = videoEnabled; });
+    videoStreamRef.current = stream;
+    await attachStreamToVideo(stream);
+    vcLog('ok', 'Camera started from preflight stream');
+  }, [attachStreamToVideo, videoEnabled]);
 
   const attachStreamToVideo = useCallback(async (stream, attempt = 0) => {
     const videoEl = videoElRef.current;
@@ -366,6 +386,10 @@ export function useVideoCall({
     isAssistantSpeakingRef.current = false;
     modelTurnActiveRef.current = false;
     ignoreAudioRef.current = false;
+    if (micPreflightStreamRef.current) {
+      micPreflightStreamRef.current.getTracks().forEach((track) => track.stop());
+      micPreflightStreamRef.current = null;
+    }
     stopRecorder();
     stopWebcam();
     streamerRef.current?.stop();
@@ -595,9 +619,23 @@ export function useVideoCall({
     }
 
     try {
-      if (!window.isSecureContext) {
-        throw new Error('Camera and microphone require HTTPS on mobile and desktop browsers. Please open this app over HTTPS and retry.');
+      const permissionStream = await requestMediaPermissions({ audio: true, video: true });
+      const [primaryVideoTrack, ...extraVideoTracks] = permissionStream.getVideoTracks();
+      const [primaryAudioTrack, ...extraAudioTracks] = permissionStream.getAudioTracks();
+
+      if (!primaryVideoTrack) {
+        throw new Error('Camera permission was granted, but no camera track is available.');
       }
+      if (!primaryAudioTrack) {
+        throw new Error('Microphone permission was granted, but no microphone track is available.');
+      }
+
+      extraVideoTracks.forEach((track) => track.stop());
+      extraAudioTracks.forEach((track) => track.stop());
+
+      const cameraStream = new MediaStream([primaryVideoTrack]);
+      await useExistingWebcamStream(cameraStream);
+      micPreflightStreamRef.current = new MediaStream([primaryAudioTrack]);
 
       // Audio output setup
       if (!streamerRef.current) {
@@ -612,9 +650,6 @@ export function useVideoCall({
         setAnalyserNode(analyser);
       }
       await streamerRef.current.resume();
-
-      // Start webcam
-      await startWebcam();
 
       clientRef.current = new GenAILiveClient({ apiKey });
       registerClientListeners(clientRef.current);
@@ -668,7 +703,7 @@ export function useVideoCall({
     }
   }, [
     apiKey, buildSystemInstruction, cleanupCall, companionVoiceName,
-    hasApiKey, isConnected, isConnecting, liveModel, registerClientListeners, startWebcam, userName, token,
+    hasApiKey, isConnected, isConnecting, liveModel, registerClientListeners, useExistingWebcamStream, userName, token,
   ]);
 
   const toggleMute = useCallback(() => setMuted((prev) => !prev), []);

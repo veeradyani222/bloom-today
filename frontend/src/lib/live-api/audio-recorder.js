@@ -26,7 +26,8 @@ export class AudioRecorder extends EventEmitter {
     this.vuWorklet = undefined;
   }
 
-  async start() {
+  async start(options = {}) {
+    const { stream: providedStream } = options;
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microphone access is not supported in this browser.');
     }
@@ -37,7 +38,15 @@ export class AudioRecorder extends EventEmitter {
 
     this.starting = new Promise(async (resolve, reject) => {
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (providedStream) {
+          const hasAudioTrack = providedStream.getAudioTracks().some((track) => track.readyState === 'live');
+          if (!hasAudioTrack) {
+            throw new Error('Provided microphone stream has no live audio track.');
+          }
+          this.stream = providedStream;
+        } else {
+          this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
         this.audioContext = await audioContext({ sampleRate: this.sampleRate });
         this.source = this.audioContext.createMediaStreamSource(this.stream);
 

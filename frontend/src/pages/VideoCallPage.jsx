@@ -2,27 +2,18 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, ChevronLeft, Video, VideoOff } from 'lucide-react';
 import { useVideoCall } from '../hooks/useVideoCall';
+import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
 import { createGestureMapper } from '../lib/gestureMapper';
 import companionBg from '../assets/companion_bg.png';
 import './VideoCallPage.css';
 
-function isLikelyIOSSafari() {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isIOS = /iP(hone|ad|od)/i.test(ua)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isWebKit = /WebKit/i.test(ua);
-  const isOtherIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
-  return isIOS && isWebKit && !isOtherIOSBrowser;
-}
-
 export function VideoCallPage({ token, session }) {
   const navigate = useNavigate();
   const location = useLocation();
   const autoStartRequested = Boolean(location.state?.autostartVideo);
-  const [requiresTapToStart] = useState(() => isLikelyIOSSafari() && !autoStartRequested);
+  const [requiresTapToStart] = useState(() => isLikelySafariBrowser());
 
   const companionName = session?.user?.companion_name || session?.user?.companionName || 'Companion';
   const companionVoiceName = session?.user?.companion_voice || session?.user?.companionVoice || 'Aoede';
@@ -230,11 +221,11 @@ export function VideoCallPage({ token, session }) {
   const startedRef = useRef(false);
   useEffect(() => {
     if (requiresTapToStart) return;
-    if (!startedRef.current && hasApiKey) {
+    if (!startedRef.current && hasApiKey && (autoStartRequested || !requiresTapToStart)) {
       startedRef.current = true;
       startCall();
     }
-  }, [hasApiKey, requiresTapToStart, startCall]);
+  }, [autoStartRequested, hasApiKey, requiresTapToStart, startCall]);
 
 
   const statusText = isConnecting

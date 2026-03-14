@@ -1,21 +1,12 @@
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PhoneOff, Mic, MicOff, ChevronLeft, Video } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, ChevronLeft, Video, ArrowLeft } from 'lucide-react';
 import { useCompanionCall } from '../hooks/useCompanionCall';
+import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
 import { createGestureMapper } from '../lib/gestureMapper';
 import './VoiceCallPage.css';
-
-function isLikelyIOSSafari() {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isIOS = /iP(hone|ad|od)/i.test(ua)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isWebKit = /WebKit/i.test(ua);
-  const isOtherIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
-  return isIOS && isWebKit && !isOtherIOSBrowser;
-}
 
 /* ── Simple audio visualiser bars ── */
 function AudioVisualiser({ volume, barCount = 5 }) {
@@ -42,7 +33,7 @@ function AudioVisualiser({ volume, barCount = 5 }) {
 export function VoiceCallPage({ token, session }) {
   const navigate = useNavigate();
   const hasStartedRef = useRef(false);
-  const [requiresTapToStart] = useState(() => isLikelyIOSSafari());
+  const [requiresTapToStart] = useState(() => isLikelySafariBrowser());
 
   const userName = session?.user?.full_name || 'there';
   const firstName = userName.split(' ')[0];

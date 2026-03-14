@@ -10,6 +10,7 @@ import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
+import { requestMediaPermissions } from '../lib/mediaPermissions';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-native-audio-latest';
 
@@ -83,6 +84,7 @@ export function useCompanionCall({
   const clientRef = useRef(null);
   const recorderRef = useRef(null);
   const streamerRef = useRef(null);
+  const micPreflightStreamRef = useRef(null);
   const shouldSendGreetingRef = useRef(false);
   const greetingSentRef = useRef(false);
   const intentionalHangupRef = useRef(false);
@@ -260,7 +262,9 @@ export function useCompanionCall({
       }
     });
 
-    await recorder.start();
+    const preflightMicStream = micPreflightStreamRef.current;
+    micPreflightStreamRef.current = null;
+    await recorder.start(preflightMicStream ? { stream: preflightMicStream } : undefined);
   }, [isConnected, muted]);
 
   /* ── Cleanup ── */
@@ -277,6 +281,10 @@ export function useCompanionCall({
     isAssistantSpeakingRef.current = false;
     modelTurnActiveRef.current = false;
     ignoreAudioRef.current = false;
+    if (micPreflightStreamRef.current) {
+      micPreflightStreamRef.current.getTracks().forEach((track) => track.stop());
+      micPreflightStreamRef.current = null;
+    }
     stopRecorder();
     streamerRef.current?.stop();
     clientRef.current?.disconnect();
@@ -357,6 +365,15 @@ export function useCompanionCall({
     }
 
     try {
+      const permissionStream = await requestMediaPermissions({ audio: true });
+      const [primaryAudioTrack, ...extraAudioTracks] = permissionStream.getAudioTracks();
+      if (!primaryAudioTrack) {
+        throw new Error('Microphone permission was granted, but no microphone track is available.');
+      }
+      extraAudioTracks.forEach((track) => track.stop());
+      permissionStream.getVideoTracks().forEach((track) => track.stop());
+      micPreflightStreamRef.current = new MediaStream([primaryAudioTrack]);
+
       if (!streamerRef.current) {
         const audioCtx = await audioContext({ id: 'companion-audio-out' });
         streamerRef.current = new AudioStreamer(audioCtx);
