@@ -12,7 +12,7 @@ const S = {
   skip: 'color: #fbbf24; font-weight: bold',
   err:  'color: #f87171; font-weight: bold',
 };
-function log(s, ...a) { console.log(L, S[s] || S.info, ...a); }
+function log() {}
 
 /* ── Cooldowns ── */
 const COOLDOWNS = { nod: 1500, shake: 2500, gesture: 3000, mood: 4000, emoji: 2000 };

@@ -86,31 +86,12 @@ export function VideoCallPage({ token, session }) {
     async function load() {
       try {
         setAvatarLoaded(false);
-        console.log('%c[VideoCall]', 'color: #60a5fa; font-weight: bold',
-          `🎭 Loading avatar "${companionAvatarId}"...`);
         await head.showAvatar({ ...avatar, lipsyncLang: 'en' });
         if (!cancelled) {
           head.setMood('happy');
           setAvatarLoaded(true);
-          console.log('%c[VideoCall]', 'color: #34d399; font-weight: bold',
-            `✅ Avatar loaded! Checking TalkingHead API:`,
-            `\n  animQueue: ${!!head.animQueue} (length: ${head.animQueue?.length})`,
-            `\n  animFactory: ${!!head.animFactory}`,
-            `\n  animEmojis: ${!!head.animEmojis} (keys: ${head.animEmojis ? Object.keys(head.animEmojis).length : 0})`,
-            `\n  playGesture: ${!!head.playGesture}`,
-            `\n  setMood: ${!!head.setMood}`,
-            `\n  animClock: ${head.animClock}`,
-            `\n  gestureTemplates: ${head.gestureTemplates ? Object.keys(head.gestureTemplates).join(', ') : 'N/A'}`,
-          );
-          // Log available emoji keys
-          if (head.animEmojis) {
-            console.log('%c[VideoCall]', 'color: #a78bfa; font-weight: bold',
-              '🎭 animEmojis keys:', Object.keys(head.animEmojis).slice(0, 30));
-          }
         }
       } catch (e) {
-        console.error('%c[VideoCall]', 'color: #f87171; font-weight: bold',
-          `❌ Avatar load failed:`, e);
       }
     }
     load();
@@ -121,12 +102,7 @@ export function VideoCallPage({ token, session }) {
   const gestureMapperRef = useRef(null);
   useEffect(() => {
     gestureMapperRef.current = createGestureMapper(headRef);
-    console.log('%c[VideoCall]', 'color: #60a5fa; font-weight: bold',
-      '🔗 Gesture mapper created, headRef.current:', !!headRef.current,
-      '| onAITranscriptRef:', !!onAITranscriptRef);
     onAITranscriptRef.current = (text) => {
-      console.log('%c[VideoCall]', 'color: #c084fc; font-weight: bold',
-        `📨 AI transcript received: "${text}"`);
       gestureMapperRef.current?.processText(text);
     };
     return () => {

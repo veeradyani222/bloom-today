@@ -27,18 +27,15 @@ export async function geminiGenerateWithFallback(apiKey, body) {
       );
       // If server error (503, 500, 429, etc.), try next model
       if (res.status >= 500 || res.status === 429) {
-        console.warn(`[GeminiFallback] ${model} returned ${res.status}, trying next...`);
         continue;
       }
       // 404 = model doesn't exist, skip
       if (res.status === 404) {
-        console.warn(`[GeminiFallback] ${model} not found (404), trying next...`);
         continue;
       }
       const data = await res.json();
       return data;
     } catch (err) {
-      console.warn(`[GeminiFallback] ${model} network error:`, err.message);
       continue;
     }
   }

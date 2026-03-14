@@ -5,11 +5,9 @@ function ResourceCard({ item }) {
   function openVideo() {
     const url = String(item?.youtubeUrl || '').trim();
     if (!url) {
-      console.warn('[RESOURCES_UI] missing_youtube_url', item);
       return;
     }
 
-    console.log('[RESOURCES_UI] open_video', { title: item?.title, url });
     const opened = window.open(url, '_blank', 'noopener,noreferrer');
     if (!opened) {
       window.location.href = url;

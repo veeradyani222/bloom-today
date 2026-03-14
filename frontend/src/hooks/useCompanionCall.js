@@ -23,9 +23,9 @@ const S = {
   err: 'color: #f87171; font-weight: bold',
   event: 'color: #c084fc; font-weight: bold',
 };
-function vcLog(style, ...args) { console.log(LOG_PREFIX, S[style] || S.info, ...args); }
-function vcWarn(...args) { console.warn(LOG_PREFIX, S.warn, ...args); }
-function vcErr(...args) { console.error(LOG_PREFIX, S.err, ...args); }
+function vcLog() {}
+function vcWarn() {}
+function vcErr() {}
 
 /* ── Tuning constants ── */
 const SPEECH_END_TIMEOUT_MS = 500;  // gap before we consider AI done speaking per-chunk
@@ -579,7 +579,6 @@ export function useCompanionCall({
     };
 
     const onGoAway = (info) => {
-      console.log('[VoiceCall] GoAway received, auto-reconnect on close', info);
     };
 
     // ── Transcript: accumulate user speech transcription ──

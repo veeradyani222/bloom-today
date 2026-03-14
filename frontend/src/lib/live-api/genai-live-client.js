@@ -13,17 +13,11 @@ const STYLES = {
   audio:   'color: #6b7280; font-weight: normal', // gray (high frequency)
 };
 
-function log(style, ...args) {
-  console.log(LOG_PREFIX, STYLES[style] || STYLES.info, ...args);
-}
+function log() {}
 
-function logWarn(...args) {
-  console.warn(LOG_PREFIX, STYLES.warn, ...args);
-}
+function logWarn() {}
 
-function logError(...args) {
-  console.error(LOG_PREFIX, STYLES.error, ...args);
-}
+function logError() {}
 
 /* ── Audio helpers ── */
 function emitAudioParts(parts, emitAudio) {

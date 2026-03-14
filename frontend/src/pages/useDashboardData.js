@@ -40,10 +40,7 @@ export function useDashboardData(token, role = 'mom') {
 
         if (role === 'mom') {
           const resourceCount = nextInsights?.mom?.resources?.resources?.length || 0;
-          console.log('[DASHBOARD_UI] resources_payload', {
-            source: nextInsights?.mom?.resources?.source,
-            resourceCount,
-          });
+
         }
 
         const nextCore = {

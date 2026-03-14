@@ -23,9 +23,9 @@ const S = {
   err:   'color: #f87171; font-weight: bold',
   event: 'color: #c084fc; font-weight: bold',
 };
-function vcLog(style, ...args) { console.log(LOG_PREFIX, S[style] || S.info, ...args); }
-function vcWarn(...args) { console.warn(LOG_PREFIX, S.warn, ...args); }
-function vcErr(...args) { console.error(LOG_PREFIX, S.err, ...args); }
+function vcLog() {}
+function vcWarn() {}
+function vcErr() {}
 
 /* ── Constants ── */
 const SPEECH_END_TIMEOUT_MS = 1200;
@@ -262,22 +262,6 @@ export function useVideoCall({
     }
   }, []);
 
-  const useExistingWebcamStream = useCallback(async (stream) => {
-    const videoTracks = stream?.getVideoTracks() || [];
-    if (!videoTracks.length) {
-      throw new Error('Camera permission was granted, but no camera track is available.');
-    }
-
-    if (videoStreamRef.current && videoStreamRef.current !== stream) {
-      videoStreamRef.current.getTracks().forEach((track) => track.stop());
-    }
-
-    videoTracks.forEach((track) => { track.enabled = videoEnabled; });
-    videoStreamRef.current = stream;
-    await attachStreamToVideo(stream);
-    vcLog('ok', 'Camera started from preflight stream');
-  }, [attachStreamToVideo, videoEnabled]);
-
   const attachStreamToVideo = useCallback(async (stream, attempt = 0) => {
     const videoEl = videoElRef.current;
     if (!videoEl) {
@@ -301,6 +285,22 @@ export function useVideoCall({
       vcWarn('📹 Video element play() blocked:', err?.message || err);
     }
   }, []);
+
+  const useExistingWebcamStream = useCallback(async (stream) => {
+    const videoTracks = stream?.getVideoTracks() || [];
+    if (!videoTracks.length) {
+      throw new Error('Camera permission was granted, but no camera track is available.');
+    }
+
+    if (videoStreamRef.current && videoStreamRef.current !== stream) {
+      videoStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    videoTracks.forEach((track) => { track.enabled = videoEnabled; });
+    videoStreamRef.current = stream;
+    await attachStreamToVideo(stream);
+    vcLog('ok', 'Camera started from preflight stream');
+  }, [attachStreamToVideo, videoEnabled]);
 
   const startWebcam = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
