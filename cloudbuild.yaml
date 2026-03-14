@@ -4,14 +4,14 @@ steps:
     args:
       - '-c'
       - |
-        echo "VITE_API_BASE_URL=https://bloom-563543181404.europe-west1.run.app" > frontend/.env
-        echo "VITE_GOOGLE_CLIENT_ID=563543181404-7fr2vgrj0fq8nn5bgd699if91d4af9vo.apps.googleusercontent.com" >> frontend/.env
-        echo "VITE_GEMINI_API_KEY=$$_VITE_GEMINI_API_KEY" >> frontend/.env
-        cat frontend/.env
+        echo "VITE_API_BASE_URL=https://bloom-563543181404.europe-west1.run.app" > /workspace/frontend/.env
+        echo "VITE_GOOGLE_CLIENT_ID=563543181404-7fr2vgrj0fq8nn5bgd699if91d4af9vo.apps.googleusercontent.com" >> /workspace/frontend/.env
+        echo "VITE_GEMINI_API_KEY=$$_VITE_GEMINI_API_KEY" >> /workspace/frontend/.env
+        cat /workspace/frontend/.env
         docker build \
           -t europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend \
-          -f frontend/Dockerfile \
-          ./frontend
+          -f /workspace/frontend/Dockerfile \
+          /workspace/frontend
 
     secretEnv:
       - '_VITE_GEMINI_API_KEY'
