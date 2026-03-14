@@ -1,0 +1,23 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker build \
+          --build-arg VITE_API_BASE_URL=https://bloom-563543181404.europe-west1.run.app \
+          --build-arg VITE_GOOGLE_CLIENT_ID=563543181404-7fr2vgrj0fq8nn5bgd699if91d4af9vo.apps.googleusercontent.com \
+          --build-arg VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY \
+          -t europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend \
+          -f frontend/Dockerfile \
+          ./frontend
+    secretEnv:
+      - 'VITE_GEMINI_API_KEY'
+
+availableSecrets:
+  secretManager:
+    - versionName: 'projects/bloom-mama-489613/secrets/VITE_GEMINI_API_KEY/versions/latest'
+      env: 'VITE_GEMINI_API_KEY'
+
+images:
+  - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend'
