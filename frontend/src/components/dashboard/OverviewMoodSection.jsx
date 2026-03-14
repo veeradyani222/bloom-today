@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { MoodRingsRow, QuickTips, StatsStrip, TodayChart } from '../../pages/DashboardPage';
+import { MoodRingsRow, StatsStrip, TodayChart } from '../../pages/DashboardPage';
 
-export function OverviewMoodSection({ current, daySeries, insights, quickTips }) {
+export function OverviewMoodSection({ current, daySeries, insights }) {
   const [selectedMetric, setSelectedMetric] = useState('mood');
 
   return (
@@ -12,7 +12,6 @@ export function OverviewMoodSection({ current, daySeries, insights, quickTips })
         daySeries={daySeries}
       />
       <TodayChart series={daySeries} selectedMetric={selectedMetric} onSelect={setSelectedMetric} />
-      <QuickTips scores={current?.signalScores} tips={quickTips?.tips} summary={quickTips?.summary} />
       <StatsStrip insights={insights} />
     </>
   );

@@ -70,13 +70,14 @@ export function BrowseDetailHeader({ title, description, onBack }) {
 }
 
 export function TrendsSection({ daySeries, insights, momData }) {
-  const [selectedMetric, setSelectedMetric] = useState('mood');
+  const [todaySelectedMetric, setTodaySelectedMetric] = useState('mood');
+  const [monthSelectedMetric, setMonthSelectedMetric] = useState('mood');
 
   return (
     <>
       <MoodCalendar monthPoints={daySeries?.month?.points} />
-      <TodayChart series={daySeries} selectedMetric={selectedMetric} onSelect={setSelectedMetric} compactTabs />
-      <MonthChart series={daySeries} selectedMetric={selectedMetric} onSelect={setSelectedMetric} compactTabs />
+      <TodayChart series={daySeries} selectedMetric={todaySelectedMetric} onSelect={setTodaySelectedMetric} compactTabs />
+      <MonthChart series={daySeries} selectedMetric={monthSelectedMetric} onSelect={setMonthSelectedMetric} compactTabs />
       <WeeklyComparison week={momData?.week} month={momData?.month} />
       <SignalTiles week={momData?.week} />
     </>

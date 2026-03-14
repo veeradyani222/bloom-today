@@ -51,11 +51,15 @@ export function VideoCallPage({ token, session }) {
   useEffect(() => {
     if (!avatarContainerRef.current) return undefined;
     const isAvatarSDK = companionAvatarId === 'avatarsdk';
+    const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
     const head = new TalkingHead(avatarContainerRef.current, {
       cameraView: 'upper',
-      cameraDistance: 0,
+      // Keep companion less zoomed so more of the character is visible.
+      cameraDistance: isMobileViewport ? 0.55 : 0.12,
       cameraX: 0,
-      cameraY: isAvatarSDK ? 0.3 : 0,
+      cameraY: isAvatarSDK
+        ? (isMobileViewport ? 0.34 : 0.24)
+        : (isMobileViewport ? 0.06 : -0.02),
       modelPixelRatio: 1.5,
       avatarMood: 'neutral',
       lipsyncLang: 'en',

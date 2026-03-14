@@ -90,11 +90,17 @@ function App() {
           return updated;
         });
       })
-      .catch(() => {
-        setSession(null);
-        saveSession(null);
-        setAuthError('Your session expired. Choose how you want to continue.');
-        navigate('/role-login', { replace: true });
+      .catch((error) => {
+        const status = Number(error?.status || 0);
+        if (status === 401 || status === 403) {
+          setSession(null);
+          saveSession(null);
+          setAuthError('Your session expired. Choose how you want to continue.');
+          navigate('/role-login', { replace: true });
+          return;
+        }
+
+        setAuthError('We could not refresh your profile right now, but you are still signed in.');
       })
       .finally(() => {
         setSessionReady(true);
@@ -187,6 +193,10 @@ function App() {
         path="/role-login"
         element={
           <RoleSelectionPage
+            token={token}
+            session={session}
+            setSession={setSession}
+            saveSession={saveSession}
             authMode
             loading={authLoading}
             error={authError}

@@ -122,8 +122,8 @@
 }
 
 .support-note-art {
-  width: 76px;
-  height: 76px;
+  width: 112px;
+  height: 112px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -1230,6 +1230,11 @@
   }
 
   .overview-streak-card { min-width: 106px; padding: 14px 12px; }
+
+  .support-note-art {
+    width: 88px;
+    height: 88px;
+  }
 
   .sec-actions-head {
     align-items: flex-start;

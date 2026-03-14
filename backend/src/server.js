@@ -116,6 +116,72 @@ function requireTherapistRole(req, res) {
   return true;
 }
 
+function isMissingTableError(error) {
+  return error && error.code === '42P01';
+}
+
+async function getUserProfileById(userId) {
+  const result = await pool.query(
+    `
+    SELECT id, email, full_name, avatar_url, onboarding_completed,
+           companion_name, companion_instructions, companion_agent_id,
+           companion_session_id, companion_avatar_id, companion_voice_name,
+           share_key, therapist_share_key, trusted_share_key,
+           preferred_dashboard_role, onboarding_assessment
+    FROM users
+    WHERE id = $1
+    `,
+    [userId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function findSupportLinkForActor(actorUserId, preferredRole) {
+  const roleFilter = preferredRole && preferredRole !== 'mom'
+    ? 'AND srl.role_type = $2'
+    : '';
+
+  const params = preferredRole && preferredRole !== 'mom'
+    ? [actorUserId, preferredRole]
+    : [actorUserId];
+
+  const result = await pool.query(
+    `
+    SELECT srl.id AS link_id,
+           srl.role_type,
+           srl.owner_user_id,
+           owner.id,
+           owner.email,
+           owner.full_name,
+           owner.avatar_url,
+           owner.onboarding_completed,
+           owner.companion_name,
+           owner.companion_instructions,
+           owner.companion_agent_id,
+           owner.companion_session_id,
+           owner.companion_avatar_id,
+           owner.companion_voice_name,
+           owner.share_key,
+           owner.therapist_share_key,
+           owner.trusted_share_key,
+           owner.preferred_dashboard_role,
+           owner.onboarding_assessment,
+           owner.therapist_key_version,
+           owner.trusted_key_version
+    FROM support_role_links srl
+    JOIN users owner ON owner.id = srl.owner_user_id
+    WHERE srl.support_user_id = $1
+      ${roleFilter}
+    ORDER BY srl.updated_at DESC
+    LIMIT 1
+    `,
+    params,
+  );
+
+  return result.rows[0] || null;
+}
+
 app.post('/api/auth/google', async (req, res) => {
   try {
     console.log('[AUTH] google_login_start');
@@ -146,25 +212,89 @@ app.post('/api/auth/google', async (req, res) => {
         therapist_share_key = COALESCE(users.therapist_share_key, EXCLUDED.therapist_share_key),
         trusted_share_key = COALESCE(users.trusted_share_key, EXCLUDED.trusted_share_key),
         updated_at = NOW()
-      RETURNING id, email, full_name, avatar_url, onboarding_completed, companion_name, companion_instructions, companion_agent_id, companion_session_id, companion_avatar_id, companion_voice_name, share_key, therapist_share_key, trusted_share_key, preferred_dashboard_role, onboarding_assessment;
+      RETURNING id, email, full_name, avatar_url, onboarding_completed,
+                companion_name, companion_instructions, companion_agent_id,
+                companion_session_id, companion_avatar_id, companion_voice_name,
+                share_key, therapist_share_key, trusted_share_key,
+                preferred_dashboard_role, onboarding_assessment,
+                therapist_key_version, trusted_key_version;
       `,
       [googleSub, email, avatarUrl, generateShareKey(), generateShareKey(), generateShareKey()],
     );
 
-    const user = upsert.rows[0];
-    console.log(`[AUTH] google_login_ok userId=${user.id} email=${user.email}`);
+    const actor = upsert.rows[0];
+
+    let supportLink = null;
+    if (actor.preferred_dashboard_role && actor.preferred_dashboard_role !== 'mom') {
+      supportLink = await findSupportLinkForActor(actor.id, actor.preferred_dashboard_role);
+    }
+
+    // If this user has no completed mom onboarding, prefer restoring their most-recent support role session.
+    if (!supportLink && !actor.onboarding_completed) {
+      supportLink = await findSupportLinkForActor(actor.id);
+    }
+
+    if (supportLink) {
+      const keyVersion = supportLink.role_type === 'therapist'
+        ? supportLink.therapist_key_version
+        : supportLink.trusted_key_version;
+
+      const accessToken = jwt.sign(
+        {
+          userId: actor.id,
+          email: actor.email,
+          authRole: supportLink.role_type,
+          targetUserId: supportLink.owner_user_id,
+          linkId: supportLink.link_id,
+          keyVersion,
+        },
+        config.jwtSecret,
+        { expiresIn: '7d' },
+      );
+
+      console.log(`[AUTH] google_login_ok userId=${actor.id} email=${actor.email} authRole=${supportLink.role_type}`);
+
+      return res.json({
+        accessToken,
+        user: {
+          id: supportLink.id,
+          email: supportLink.email,
+          full_name: supportLink.full_name,
+          avatar_url: supportLink.avatar_url,
+          onboarding_completed: supportLink.onboarding_completed,
+          companion_name: supportLink.companion_name,
+          companion_instructions: supportLink.companion_instructions,
+          companion_agent_id: supportLink.companion_agent_id,
+          companion_session_id: supportLink.companion_session_id,
+          companion_avatar_id: supportLink.companion_avatar_id,
+          companion_voice_name: supportLink.companion_voice_name,
+          share_key: null,
+          therapist_share_key: null,
+          trusted_share_key: null,
+          preferred_dashboard_role: supportLink.preferred_dashboard_role,
+          onboarding_assessment: supportLink.onboarding_assessment,
+          auth_role: supportLink.role_type,
+          support_user_name: actor.full_name || '',
+          support_user_email: actor.email || '',
+        },
+        actor,
+      });
+    }
+
+    const user = await getUserProfileById(actor.id);
+    console.log(`[AUTH] google_login_ok userId=${actor.id} email=${actor.email} authRole=mom`);
 
     const accessToken = jwt.sign(
       {
-        userId: user.id,
-        email: user.email,
+        userId: actor.id,
+        email: actor.email,
         authRole: 'mom',
       },
       config.jwtSecret,
       { expiresIn: '7d' },
     );
 
-    return res.json({ accessToken, user });
+    return res.json({ accessToken, user: { ...user, auth_role: 'mom' }, actor: null });
   } catch (error) {
     console.error('[AUTH] google_login_error', error);
     if (error instanceof z.ZodError) {
@@ -239,7 +369,7 @@ app.post('/api/auth/google-role', async (req, res) => {
         { expiresIn: '7d' },
       );
 
-      return res.json({ accessToken, user: userRes.rows[0] });
+      return res.json({ accessToken, user: { ...userRes.rows[0], auth_role: 'mom' } });
     }
 
     const normalizedKey = normalizeKey(input.supportKey);
@@ -410,135 +540,157 @@ app.post('/api/auth/switch-support-role', async (req, res) => {
 });
 
 app.get('/api/me', async (req, res) => {
-  const { authRole, actorUserId, ownerUserId } = getAuthContext(req);
-  const result = await pool.query(
-    `
-    SELECT u.id, u.email, u.full_name, u.avatar_url, u.onboarding_completed,
-           u.companion_name, u.companion_instructions, u.companion_agent_id,
-           u.companion_avatar_id, u.companion_voice_name,
-           u.share_key, u.therapist_share_key, u.trusted_share_key, u.created_at, u.companion_session_id,
-           u.preferred_dashboard_role, u.onboarding_assessment,
-           c.id AS companion_id, c.name AS comp_name,
-           c.user_instructions AS comp_user_instructions,
-           c.therapist_instructions AS comp_therapist_instructions,
-           c.base_prompt AS comp_base_prompt, c.avatar_id AS comp_avatar_id,
-           c.voice_name AS comp_voice_name,
-           c.agent_id AS comp_agent_id, c.session_id AS comp_session_id
-    FROM users u
-    LEFT JOIN companions c ON c.user_id = u.id
-    WHERE u.id = $1
-    `,
-    [ownerUserId],
-  );
-
-  if (!result.rows.length) {
-    return res.status(404).json({ error: 'User not found.' });
-  }
-
-  const row = result.rows[0];
-  const latestTherapistMessageRes = await pool.query(
-    `
-    SELECT message_text, companion_instruction, created_at
-    FROM therapist_notes
-    WHERE owner_user_id = $1
-      AND message_text <> ''
-    ORDER BY created_at DESC
-    LIMIT 1
-    `,
-    [ownerUserId],
-  );
-
-  const latestTherapistMessage = latestTherapistMessageRes.rows[0] || null;
-
-  const latestTrustedMessageRes = await pool.query(
-    `
-    SELECT message_text, created_at
-    FROM trusted_notes
-    WHERE owner_user_id = $1
-      AND message_text <> ''
-    ORDER BY created_at DESC
-    LIMIT 1
-    `,
-    [ownerUserId],
-  );
-
-  const latestTrustedMessage = latestTrustedMessageRes.rows[0] || null;
-
-  const memoriesRes = await pool.query(
-    `SELECT content FROM user_memories WHERE user_id = $1 ORDER BY level ASC, bucket_date ASC LIMIT 10`,
-    [ownerUserId],
-  );
-  const userMemories = memoriesRes.rows.map((r) => r.content);
-
-  let actorProfile = null;
-  if (actorUserId) {
-    const actorProfileRes = await pool.query(
-      `SELECT full_name, email FROM users WHERE id = $1`,
-      [actorUserId],
+  try {
+    const { authRole, actorUserId, ownerUserId } = getAuthContext(req);
+    const result = await pool.query(
+      `
+      SELECT u.id, u.email, u.full_name, u.avatar_url, u.onboarding_completed,
+             u.companion_name, u.companion_instructions, u.companion_agent_id,
+             u.companion_avatar_id, u.companion_voice_name,
+             u.share_key, u.therapist_share_key, u.trusted_share_key, u.created_at, u.companion_session_id,
+             u.preferred_dashboard_role, u.onboarding_assessment,
+             c.id AS companion_id, c.name AS comp_name,
+             c.user_instructions AS comp_user_instructions,
+             c.therapist_instructions AS comp_therapist_instructions,
+             c.base_prompt AS comp_base_prompt, c.avatar_id AS comp_avatar_id,
+             c.voice_name AS comp_voice_name,
+             c.agent_id AS comp_agent_id, c.session_id AS comp_session_id
+      FROM users u
+      LEFT JOIN companions c ON c.user_id = u.id
+      WHERE u.id = $1
+      `,
+      [ownerUserId],
     );
-    actorProfile = actorProfileRes.rows[0] || null;
-  }
 
-  const user = {
-    id: row.id,
-    email: row.email,
-    full_name: row.full_name,
-    avatar_url: row.avatar_url,
-    onboarding_completed: row.onboarding_completed,
-    companion_name: row.companion_name,
-    companion_instructions: row.companion_instructions,
-    companion_agent_id: row.companion_agent_id,
-    companion_session_id: row.companion_session_id,
-    companion_avatar_id: row.companion_avatar_id,
-    companion_voice_name: row.companion_voice_name,
-    share_key: authRole === 'mom' ? row.share_key : null,
-    therapist_share_key: authRole === 'mom' ? row.therapist_share_key : null,
-    trusted_share_key: authRole === 'mom' ? row.trusted_share_key : null,
-    created_at: row.created_at,
-    preferred_dashboard_role: row.preferred_dashboard_role,
-    onboarding_assessment: row.onboarding_assessment,
-    auth_role: authRole,
-    support_user_name: authRole !== 'mom' ? (actorProfile?.full_name || '') : null,
-    support_user_email: authRole !== 'mom' ? (actorProfile?.email || '') : null,
-    latest_therapist_message: latestTherapistMessage
-      ? {
-        text: latestTherapistMessage.message_text,
-        created_at: latestTherapistMessage.created_at,
-      }
-      : null,
-    latest_trusted_message: latestTrustedMessage
-      ? {
-        text: latestTrustedMessage.message_text,
-        created_at: latestTrustedMessage.created_at,
-      }
-      : null,
-    memories: userMemories,
-  };
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
 
-  if (row.companion_id) {
-    user.companion = {
-      id: row.companion_id,
-      name: row.comp_name,
-      user_instructions: row.comp_user_instructions,
-      therapist_instructions: row.comp_therapist_instructions,
-      base_prompt: row.comp_base_prompt,
-      avatar_id: row.comp_avatar_id,
-      voice_name: row.comp_voice_name,
-      agent_id: row.comp_agent_id,
-      session_id: row.comp_session_id,
+    const row = result.rows[0];
+
+    let latestTherapistMessage = null;
+    try {
+      const latestTherapistMessageRes = await pool.query(
+        `
+        SELECT message_text, companion_instruction, created_at
+        FROM therapist_notes
+        WHERE owner_user_id = $1
+          AND message_text <> ''
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [ownerUserId],
+      );
+      latestTherapistMessage = latestTherapistMessageRes.rows[0] || null;
+    } catch (error) {
+      if (!isMissingTableError(error)) throw error;
+      console.warn('[ME] therapist_notes_missing_table');
+    }
+
+    let latestTrustedMessage = null;
+    try {
+      const latestTrustedMessageRes = await pool.query(
+        `
+        SELECT message_text, created_at
+        FROM trusted_notes
+        WHERE owner_user_id = $1
+          AND message_text <> ''
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [ownerUserId],
+      );
+      latestTrustedMessage = latestTrustedMessageRes.rows[0] || null;
+    } catch (error) {
+      if (!isMissingTableError(error)) throw error;
+      console.warn('[ME] trusted_notes_missing_table');
+    }
+
+    let userMemories = [];
+    try {
+      const memoriesRes = await pool.query(
+        `SELECT content FROM user_memories WHERE user_id = $1 ORDER BY level ASC, bucket_date ASC LIMIT 10`,
+        [ownerUserId],
+      );
+      userMemories = memoriesRes.rows.map((r) => r.content);
+    } catch (error) {
+      if (!isMissingTableError(error)) throw error;
+      console.warn('[ME] user_memories_missing_table');
+    }
+
+    let actorProfile = null;
+    if (actorUserId) {
+      const actorProfileRes = await pool.query(
+        `SELECT full_name, email FROM users WHERE id = $1`,
+        [actorUserId],
+      );
+      actorProfile = actorProfileRes.rows[0] || null;
+    }
+
+    const user = {
+      id: row.id,
+      email: row.email,
+      full_name: row.full_name,
+      avatar_url: row.avatar_url,
+      onboarding_completed: row.onboarding_completed,
+      companion_name: row.companion_name,
+      companion_instructions: row.companion_instructions,
+      companion_agent_id: row.companion_agent_id,
+      companion_session_id: row.companion_session_id,
+      companion_avatar_id: row.companion_avatar_id,
+      companion_voice_name: row.companion_voice_name,
+      share_key: authRole === 'mom' ? row.share_key : null,
+      therapist_share_key: authRole === 'mom' ? row.therapist_share_key : null,
+      trusted_share_key: authRole === 'mom' ? row.trusted_share_key : null,
+      created_at: row.created_at,
+      preferred_dashboard_role: row.preferred_dashboard_role,
+      onboarding_assessment: row.onboarding_assessment,
+      auth_role: authRole,
+      support_user_name: authRole !== 'mom' ? (actorProfile?.full_name || '') : null,
+      support_user_email: authRole !== 'mom' ? (actorProfile?.email || '') : null,
+      latest_therapist_message: latestTherapistMessage
+        ? {
+          text: latestTherapistMessage.message_text,
+          created_at: latestTherapistMessage.created_at,
+        }
+        : null,
+      latest_trusted_message: latestTrustedMessage
+        ? {
+          text: latestTrustedMessage.message_text,
+          created_at: latestTrustedMessage.created_at,
+        }
+        : null,
+      memories: userMemories,
     };
-  }
 
-  return res.json({
-    user,
-    actor: {
-      id: actorUserId,
-      role: authRole,
-      ownerUserId,
-      full_name: actorProfile?.full_name || '',
-      email: actorProfile?.email || '',
-    },
-  });
+    if (row.companion_id) {
+      user.companion = {
+        id: row.companion_id,
+        name: row.comp_name,
+        user_instructions: row.comp_user_instructions,
+        therapist_instructions: row.comp_therapist_instructions,
+        base_prompt: row.comp_base_prompt,
+        avatar_id: row.comp_avatar_id,
+        voice_name: row.comp_voice_name,
+        agent_id: row.comp_agent_id,
+        session_id: row.comp_session_id,
+      };
+    }
+
+    return res.json({
+      user,
+      actor: {
+        id: actorUserId,
+        role: authRole,
+        ownerUserId,
+        full_name: actorProfile?.full_name || '',
+        email: actorProfile?.email || '',
+      },
+    });
+  } catch (error) {
+    console.error('[ME] profile_error', error);
+    return res.status(500).json({ error: 'Failed to restore profile.' });
+  }
 });
 
 app.get('/api/me/support-keys', async (req, res) => {

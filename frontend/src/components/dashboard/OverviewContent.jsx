@@ -1,5 +1,5 @@
 import React from 'react';
-import { TherapistDashboard, TrustedDashboard } from '../../pages/DashboardPage';
+import { QuickTips, TherapistDashboard, TrustedDashboard } from '../../pages/DashboardPage';
 import { OverviewActionsSection } from './OverviewActionsSection';
 import { OverviewBloomNoteSection } from './OverviewBloomNoteSection';
 import { OverviewCommunitySection } from './OverviewCommunitySection';
@@ -37,7 +37,8 @@ function MomOverviewContent({
         activity={insights?.activity}
       />
       <OverviewActionsSection companionName={companionName} illustration={jumpBackIllustration} />
-      <OverviewMoodSection current={current} daySeries={daySeries} insights={insights} quickTips={quickTips} />
+      <QuickTips scores={current?.signalScores} tips={quickTips?.tips} summary={quickTips?.summary} />
+      <OverviewMoodSection current={current} daySeries={daySeries} insights={insights} />
       <OverviewCommunitySection momTips={momTips} />
       <OverviewBloomNoteSection data={data} current={current} firstName={firstName} />
     </>

@@ -17,7 +17,7 @@ async function authMiddleware(req, res, next) {
 
     const authRole = payload.authRole || 'mom';
     if (authRole !== 'mom') {
-      if (!payload.linkId || !payload.targetUserId || !payload.keyVersion) {
+      if (!payload.linkId || !payload.targetUserId || payload.keyVersion === undefined || payload.keyVersion === null) {
         return res.status(401).json({ error: 'Invalid support role session.' });
       }
 
