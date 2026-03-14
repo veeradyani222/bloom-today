@@ -26,6 +26,9 @@ steps:
       - '--region=europe-west1'
       - '--platform=managed'
 
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 availableSecrets:
   secretManager:
     - versionName: 'projects/bloom-mama-489613/secrets/VITE_GEMINI_API_KEY/versions/latest'
