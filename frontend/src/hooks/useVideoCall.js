@@ -37,6 +37,23 @@ const CAPTURE_HEIGHT = 240;
 function clampVolume(value) { return Math.max(0, Math.min(1, value)); }
 function normalizeModelName(m) { return m ? m.replace(/^models\//, '') : DEFAULT_MODEL; }
 
+function formatCameraStartupError(err) {
+  if (!err) return 'Could not access your camera.';
+  if (err.name === 'NotAllowedError') {
+    return 'Camera permission was denied. Please allow camera access in your browser settings and retry.';
+  }
+  if (err.name === 'NotFoundError') {
+    return 'No camera device was found on this phone.';
+  }
+  if (err.name === 'NotReadableError') {
+    return 'Your camera is busy in another app. Close other camera apps and retry.';
+  }
+  if (err.name === 'OverconstrainedError') {
+    return 'Camera could not start with the selected settings. Retrying with basic settings may help.';
+  }
+  return err.message || 'Could not access your camera.';
+}
+
 function estimatePcmVolume(arrayBuffer) {
   const view = new DataView(arrayBuffer);
   const sampleCount = view.byteLength / 2;
@@ -241,23 +258,66 @@ export function useVideoCall({
     }
   }, []);
 
-  const startWebcam = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false, // Audio is handled by AudioRecorder
-      });
-      videoStreamRef.current = stream;
-
-      // Wire to video element if available
-      if (videoElRef.current) {
-        videoElRef.current.srcObject = stream;
+  const attachStreamToVideo = useCallback(async (stream, attempt = 0) => {
+    const videoEl = videoElRef.current;
+    if (!videoEl) {
+      if (attempt < 10) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return attachStreamToVideo(stream, attempt + 1);
       }
-      vcLog('ok', '📹 Webcam started');
+      return;
+    }
+
+    videoEl.srcObject = stream;
+    videoEl.muted = true;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', 'true');
+    videoEl.setAttribute('webkit-playsinline', 'true');
+
+    try {
+      await videoEl.play();
     } catch (err) {
-      vcWarn('📹 Webcam access denied:', err?.message);
+      vcWarn('📹 Video element play() blocked:', err?.message || err);
     }
   }, []);
+
+  const startWebcam = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera is unavailable in this browser. Open the app on HTTPS (or localhost) and retry.');
+    }
+
+    const cameraConstraints = [
+      {
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: { ideal: 'user' } },
+        audio: false,
+      },
+      {
+        video: { facingMode: { ideal: 'user' } },
+        audio: false,
+      },
+      { video: true, audio: false },
+    ];
+
+    let lastError = null;
+    for (const constraints of cameraConstraints) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoStreamRef.current = stream;
+        await attachStreamToVideo(stream);
+        vcLog('ok', '📹 Webcam started');
+        return;
+      } catch (err) {
+        lastError = err;
+        vcWarn('📹 Webcam attempt failed:', err?.name || 'UnknownError', err?.message || err);
+      }
+    }
+
+    if (!window.isSecureContext) {
+      throw new Error('Camera requires a secure connection. Open this app over HTTPS on your phone.');
+    }
+    throw new Error(formatCameraStartupError(lastError));
+  }, [attachStreamToVideo]);
 
   /* ── Frame capture → send to Gemini ── */
   const startFrameCapture = useCallback(() => {
@@ -535,6 +595,10 @@ export function useVideoCall({
     }
 
     try {
+      if (!window.isSecureContext) {
+        throw new Error('Camera and microphone require HTTPS on mobile and desktop browsers. Please open this app over HTTPS and retry.');
+      }
+
       // Audio output setup
       if (!streamerRef.current) {
         const audioCtx = await audioContext({ id: 'companion-audio-out' });
@@ -609,7 +673,7 @@ export function useVideoCall({
 
   const toggleMute = useCallback(() => setMuted((prev) => !prev), []);
 
-  const toggleVideo = useCallback(() => {
+  const toggleVideo = useCallback(async () => {
     setVideoEnabled((prev) => {
       const next = !prev;
       if (videoStreamRef.current) {
@@ -617,7 +681,16 @@ export function useVideoCall({
       }
       return next;
     });
-  }, []);
+
+    if (!videoStreamRef.current) {
+      try {
+        await startWebcam();
+        setError('');
+      } catch (err) {
+        setError(err?.message || 'Could not start camera.');
+      }
+    }
+  }, [startWebcam]);
 
 
   /* ── Mic control ── */
