@@ -19,6 +19,11 @@ steps:
     secretEnv:
       - 'VITE_GEMINI_API_KEY'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
+
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     args:
       - 'gcloud'
