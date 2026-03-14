@@ -7,6 +7,16 @@ import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
 import { createGestureMapper } from '../lib/gestureMapper';
 import './VoiceCallPage.css';
 
+function isLikelyIOSSafari() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iP(hone|ad|od)/i.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isWebKit = /WebKit/i.test(ua);
+  const isOtherIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+  return isIOS && isWebKit && !isOtherIOSBrowser;
+}
+
 /* ── Simple audio visualiser bars ── */
 function AudioVisualiser({ volume, barCount = 5 }) {
   const bars = useMemo(() => {
@@ -32,6 +42,7 @@ function AudioVisualiser({ volume, barCount = 5 }) {
 export function VoiceCallPage({ token, session }) {
   const navigate = useNavigate();
   const hasStartedRef = useRef(false);
+  const [requiresTapToStart] = useState(() => isLikelyIOSSafari());
 
   const userName = session?.user?.full_name || 'there';
   const firstName = userName.split(' ')[0];
@@ -142,11 +153,12 @@ export function VoiceCallPage({ token, session }) {
 
   // Auto-start the call on mount
   useEffect(() => {
+    if (requiresTapToStart) return;
     if (!hasStartedRef.current && hasApiKey) {
       hasStartedRef.current = true;
       startCall();
     }
-  }, [hasApiKey, startCall]);
+  }, [hasApiKey, requiresTapToStart, startCall]);
 
   // Navigate on call error/drop — only when not intentionally ending
   const prevCallState = useRef(callState);
@@ -173,6 +185,12 @@ export function VoiceCallPage({ token, session }) {
 
   function handleRetry() {
     hasStartedRef.current = false;
+    startCall();
+  }
+
+  function handleStartCallTap() {
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
     startCall();
   }
 
@@ -244,6 +262,12 @@ export function VoiceCallPage({ token, session }) {
         {callState === 'error' && (
           <button className="call-error-retry" onClick={handleRetry} style={{ marginTop: '20px' }}>
             Retry Call
+          </button>
+        )}
+
+        {requiresTapToStart && !hasStartedRef.current && callState === 'idle' && (
+          <button className="call-error-retry" onClick={handleStartCallTap} style={{ marginTop: '20px' }}>
+            Tap to Start Call
           </button>
         )}
       </div>

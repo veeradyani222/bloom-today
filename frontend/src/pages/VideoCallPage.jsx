@@ -8,8 +8,19 @@ import { createGestureMapper } from '../lib/gestureMapper';
 import companionBg from '../assets/companion_bg.png';
 import './VideoCallPage.css';
 
+function isLikelyIOSSafari() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iP(hone|ad|od)/i.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isWebKit = /WebKit/i.test(ua);
+  const isOtherIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+  return isIOS && isWebKit && !isOtherIOSBrowser;
+}
+
 export function VideoCallPage({ token, session }) {
   const navigate = useNavigate();
+  const [requiresTapToStart] = useState(() => isLikelyIOSSafari());
 
   const companionName = session?.user?.companion_name || session?.user?.companionName || 'Companion';
   const companionVoiceName = session?.user?.companion_voice || session?.user?.companionVoice || 'Aoede';
@@ -216,11 +227,12 @@ export function VideoCallPage({ token, session }) {
   /* ── Auto-start call ── */
   const startedRef = useRef(false);
   useEffect(() => {
+    if (requiresTapToStart) return;
     if (!startedRef.current && hasApiKey) {
       startedRef.current = true;
       startCall();
     }
-  }, [hasApiKey, startCall]);
+  }, [hasApiKey, requiresTapToStart, startCall]);
 
 
   const statusText = isConnecting
@@ -243,6 +255,12 @@ export function VideoCallPage({ token, session }) {
 
   function handleRetry() {
     startedRef.current = false;
+    startCall();
+  }
+
+  function handleStartCallTap() {
+    if (startedRef.current) return;
+    startedRef.current = true;
     startCall();
   }
 
@@ -289,6 +307,11 @@ export function VideoCallPage({ token, session }) {
           {callState === 'error' && (
             <button className="vcall-error-retry" onClick={handleRetry} style={{ marginTop: '16px' }}>
               Retry Call
+            </button>
+          )}
+          {requiresTapToStart && !startedRef.current && callState === 'idle' && (
+            <button className="vcall-error-retry" onClick={handleStartCallTap} style={{ marginTop: '16px' }}>
+              Tap to Start Call
             </button>
           )}
         </div>

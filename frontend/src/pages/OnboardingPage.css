@@ -19,7 +19,8 @@
   border: none;
   border-radius: 0;
   box-shadow: none;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -92,6 +93,7 @@
   padding: 20px 20px;
   gap: 16px;
   min-height: 0;
+  overflow-y: auto;
   animation: onb-fadeIn 0.35s ease;
 }
 
