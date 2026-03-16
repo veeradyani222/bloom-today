@@ -452,7 +452,7 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
           </span>
           <p className="onb-key-hint">
             {step.connectionType === 'therapist'
-              ? 'Your therapist can enter this code on CalmNest to connect with you.'
+              ? 'Your therapist can enter this code on Bloom Today to connect with you.'
               : 'Your trusted person can enter this code to join your support circle.'}
           </p>
           <button

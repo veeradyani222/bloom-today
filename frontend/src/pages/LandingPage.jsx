@@ -1,5 +1,6 @@
 import React from 'react';
 import { GoogleButton } from '../components/GoogleButton';
+import logoUrl from '../assets/logo.png';
 
 export function LandingPage({ onGoogleSignIn, loading, error }) {
   if (loading) {
@@ -22,10 +23,13 @@ export function LandingPage({ onGoogleSignIn, loading, error }) {
       </div>
 
       <div className="relative z-10 flex flex-col items-center text-center gap-8 max-w-md">
+        {/* Logo */}
+        <img src={logoUrl} alt="Bloom Today" className="w-24 h-24 object-contain mb-2" />
+
         {/* Badge */}
         <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-50 text-rose-600 text-xs font-semibold uppercase tracking-wider">
           <span className="w-2 h-2 rounded-full bg-rose-500" />
-          CalmNest
+          Bloom Today
         </span>
 
         {/* Headline */}

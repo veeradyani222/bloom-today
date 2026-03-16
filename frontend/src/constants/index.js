@@ -5,7 +5,7 @@ export const DASHBOARD_ROLES = ['mom', 'therapist', 'trusted'];
 export const ROLE_COPY = {
   mom: {
     title: 'New Mom',
-    subtitle: 'Use CalmNest for your own postpartum support journey.',
+    subtitle: 'Use Bloom Today for your own postpartum support journey.',
   },
   therapist: {
     title: 'Therapist / Doctor',
@@ -133,7 +133,7 @@ export const onboardingSteps = [
   {
     id: 'shareTherapistKey',
     title: 'Here\'s your connection code',
-    subtitle: 'Share this code with your therapist — they can enter it on CalmNest to connect with you.',
+    subtitle: 'Share this code with your therapist — they can enter it on Bloom Today to connect with you.',
     type: 'shareKey',
     connectionType: 'therapist',
   },

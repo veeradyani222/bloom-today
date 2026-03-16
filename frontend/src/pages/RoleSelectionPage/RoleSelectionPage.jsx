@@ -173,7 +173,7 @@ export function RoleSelectionPage({
     }
   }
 
-  const helperTitle = authMode ? 'Choose how you want to sign in' : 'How do you want to use CalmNest?';
+  const helperTitle = authMode ? 'Choose how you want to sign in' : 'How do you want to use Bloom Today?';
   const helperSubtitle = authMode
     ? 'Pick your role first. If you choose therapist or trusted person, you will enter the key in the next step.'
     : 'Choose your role first. Therapist and trusted person keys are asked in the next step.';
