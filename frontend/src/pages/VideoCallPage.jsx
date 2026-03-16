@@ -113,12 +113,12 @@ export function VideoCallPage({ token, session }) {
 
   const isSpeaking = turnState === 'ai-speaking';
 
-  // Fake lip-sync: directly push viseme animations into TalkingHead's animQueue.
+  // Procedural lip-sync: directly push viseme animations into TalkingHead's animQueue.
   // Use modelTurnActive (true from first chunk until turncomplete) instead of
   // isSpeaking (which dies when chunks stop arriving, before audio finishes playing).
   const isLipSyncing = modelTurnActive;
-  const fakeSpeakingRef = useRef(false);
-  const fakeIntervalRef = useRef(null);
+  const proceduralSpeakingRef = useRef(false);
+  const proceduralIntervalRef = useRef(null);
   const stopDebounceRef = useRef(null);
 
   useEffect(() => {
@@ -157,20 +157,20 @@ export function VideoCallPage({ token, session }) {
         stopDebounceRef.current = null;
       }
 
-      if (!fakeSpeakingRef.current) {
-        fakeSpeakingRef.current = true;
+      if (!proceduralSpeakingRef.current) {
+        proceduralSpeakingRef.current = true;
         pushVisemes(); // Start immediately
-        fakeIntervalRef.current = setInterval(pushVisemes, 1800); // Refresh every 1.8s
+        proceduralIntervalRef.current = setInterval(pushVisemes, 1800); // Refresh every 1.8s
       }
-    } else if (!isLipSyncing && fakeSpeakingRef.current) {
+    } else if (!isLipSyncing && proceduralSpeakingRef.current) {
       // Debounce stop by 1s
       if (!stopDebounceRef.current) {
         stopDebounceRef.current = setTimeout(() => {
           stopDebounceRef.current = null;
-          fakeSpeakingRef.current = false;
-          if (fakeIntervalRef.current) {
-            clearInterval(fakeIntervalRef.current);
-            fakeIntervalRef.current = null;
+          proceduralSpeakingRef.current = false;
+          if (proceduralIntervalRef.current) {
+            clearInterval(proceduralIntervalRef.current);
+            proceduralIntervalRef.current = null;
           }
           // Clear any remaining viseme animations
           if (headRef.current?.animQueue) {
