@@ -1,33 +1,33 @@
+const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 const audioContextMap = new Map();
 
+/**
+ * Get or create an AudioContext. Safari-compatible:
+ * - Uses webkitAudioContext fallback
+ * - Must be called during a user gesture (click/tap handler) for Safari
+ * - Automatically resumes suspended contexts
+ */
 export async function audioContext(options = {}) {
-  const didInteract = new Promise((resolve) => {
-    window.addEventListener('pointerdown', resolve, { once: true });
-    window.addEventListener('keydown', resolve, { once: true });
-  });
-
-  async function createContext() {
-    if (options.id && audioContextMap.has(options.id)) {
-      return audioContextMap.get(options.id);
+  if (options.id && audioContextMap.has(options.id)) {
+    const existing = audioContextMap.get(options.id);
+    // Safari may suspend or interrupt contexts — always try to resume
+    if (existing.state === 'suspended' || existing.state === 'interrupted') {
+      try { await existing.resume(); } catch (_) {}
     }
-
-    const context = new AudioContext(options);
-    if (options.id) {
-      audioContextMap.set(options.id, context);
-    }
-    return context;
+    return existing;
   }
 
-  try {
-    const unlockAudio = new Audio();
-    unlockAudio.src =
-      'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-    await unlockAudio.play();
-    return createContext();
-  } catch {
-    await didInteract;
-    return createContext();
+  const context = new AudioContextClass(options);
+
+  // Immediately resume — this works when called within a user-gesture call-stack
+  if (context.state === 'suspended' || context.state === 'interrupted') {
+    try { await context.resume(); } catch (_) {}
   }
+
+  if (options.id) {
+    audioContextMap.set(options.id, context);
+  }
+  return context;
 }
 
 export function base64ToArrayBuffer(base64) {
