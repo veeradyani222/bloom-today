@@ -154,6 +154,20 @@ All tables are created automatically by the migration script (`npm run migrate`)
 4. **Dashboard**: View your Bloom Score, mood/energy/sleep/calm rings, quick tips, and community notes from other moms.
 5. **Multi-Role Access**: Therapists and trusted persons connect via unique 8-character keys and see their own tailored dashboards.
 
+## Browser Compatibility
+
+Bloom currently provides the best experience on modern Chromium-based browsers such as Google Chrome and Microsoft Edge.
+
+⚠️ **Safari (including iOS Safari) is not fully supported at this time.**
+
+Due to limitations in Safari’s WebRTC and media handling, the following features may not function reliably:
+
+- Voice calls  
+- Video calls  
+- Real-time audio streaming  
+
+I am actively working on improving cross-browser support, but for now, we recommend using Chrome for the best experience.
+
 ## Deployment
 
 The project is containerized with Docker and deploys to Google Cloud Run via Cloud Build:
@@ -162,7 +176,3 @@ The project is containerized with Docker and deploys to Google Cloud Run via Clo
 # Build and deploy (handled by cloudbuild.yaml)
 gcloud builds submit
 ```
-
-## License
-
-ISC
