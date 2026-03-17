@@ -30,8 +30,8 @@ export function VideoCallPage({ token, session }) {
 
   /* ── Hook ── */
   const {
-    callState, error: callError, muted, videoEnabled,
-    remoteVolume, isConnecting, isConnected,
+    callState, muted, videoEnabled,
+    remoteVolume, isConnected,
     hasApiKey, formattedDuration, turnState, modelTurnActive,
     startCall, endCall, toggleMute, toggleVideo,
     videoElRef,
@@ -204,13 +204,7 @@ export function VideoCallPage({ token, session }) {
   }, [autoStartRequested, hasApiKey, requiresTapToStart, startCall]);
 
 
-  const statusText = isConnecting
-    ? 'Waiting for you to join the call'
-    : isConnected
-      ? formattedDuration
-      : callState === 'error'
-        ? callError || 'Call disconnected'
-        : '';
+  const statusText = formattedDuration;
 
   function handleEndCall() {
     endCall();

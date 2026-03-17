@@ -11,20 +11,36 @@ import { OverviewError, OverviewLoading } from '../components/dashboard/Overview
 
 function MoodCheckInPopup({ onClose, onSelect }) {
   const options = ['great', 'good', 'okay', 'low', 'tough'];
+  const [selected, setSelected] = useState(null);
+
+  const handleSelect = (mood) => {
+    setSelected(mood);
+    onSelect(mood);
+  };
 
   return (
     <div className="dash-popup-overlay" onClick={onClose}>
       <div className="dash-popup-card" onClick={(event) => event.stopPropagation()}>
         <button type="button" className="dash-popup-close" onClick={onClose}>x</button>
-        <h2>How are you feeling today?</h2>
-        <p>A quick check-in to start your day.</p>
-        <div className="dash-mood-picker">
-          {options.map((option) => (
-            <button key={option} type="button" className="dash-mood-option" onClick={() => onSelect(option)}>
-              <span>{option}</span>
-            </button>
-          ))}
-        </div>
+        {!selected ? (
+          <>
+            <h2>How are you feeling today?</h2>
+            <p>A quick check-in to start your day.</p>
+            <div className="dash-mood-picker">
+              {options.map((option) => (
+                <button key={option} type="button" className="dash-mood-option" onClick={() => handleSelect(option)}>
+                  <span>{option}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="dash-popup-thanks">
+            <h2>Thanks for sharing</h2>
+            <p>Select Done when you're ready.</p>
+            <button type="button" className="dash-popup-done-btn" onClick={onClose}>Done</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -370,7 +370,6 @@ function MoodCheckInPopup({ onClose, onSelect }) {
   const handlePick = (mood) => {
     setSelected(mood);
     onSelect(mood);
-    setTimeout(onClose, 1200);
   };
 
   return (
@@ -392,8 +391,9 @@ function MoodCheckInPopup({ onClose, onSelect }) {
       ) : (
         <div className="dash-popup-thanks">
           <Heart size={40} className="dash-popup-heart" />
-          <h2>Thanks for checking in</h2>
-          <p>We're here for you today.</p>
+          <h2>Thanks for sharing</h2>
+          <p>Select Done when you're ready.</p>
+          <button type="button" className="dash-popup-done-btn" onClick={onClose}>Done</button>
         </div>
       )}
     </PopupOverlay>

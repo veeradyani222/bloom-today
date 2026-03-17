@@ -43,8 +43,8 @@ export class AudioStreamer {
   }
 
   addPCM16(chunk) {
-    // Auto-resume suspended/interrupted AudioContext (Safari uses 'interrupted' on iOS background)
-    if (this.context.state === 'suspended' || this.context.state === 'interrupted') {
+    // Auto-resume suspended AudioContext (critical for background tab recovery)
+    if (this.context.state === 'suspended') {
       this.context.resume().catch(() => {});
     }
 
@@ -135,16 +135,12 @@ export class AudioStreamer {
   }
 
   async resume() {
-    // Safari uses 'interrupted' state when app goes to background on iOS
-    if (this.context.state === 'suspended' || this.context.state === 'interrupted') {
+    if (this.context.state === 'suspended') {
       await this.context.resume();
     }
     this.isStreamComplete = false;
     this.scheduledTime = this.context.currentTime + this.initialBufferTime;
-    try {
-      this.gainNode.gain.cancelScheduledValues(this.context.currentTime);
-      this.gainNode.gain.setValueAtTime(1, this.context.currentTime);
-    } catch (_) {}
+    this.gainNode.gain.setValueAtTime(1, this.context.currentTime);
   }
 
   stop() {

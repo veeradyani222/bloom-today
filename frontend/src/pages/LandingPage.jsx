@@ -116,6 +116,17 @@ export function LandingPage({ onGoogleSignIn, loading, error }) {
           <GoogleButton onCredential={onGoogleSignIn} disabled={loading} />
         </div>
       </section>
+
+      <footer className="landing-footer">
+        <div className="landing-footer__content">
+          <p className="landing-footer__text">
+            Built with a lot of love by <a href="https://veer.preffer.me" target="_blank" rel="noopener noreferrer">Veer Adyani</a>
+          </p>
+          <p className="landing-footer__mission">
+            Hoping to bring more attention to women's wellness
+          </p>
+        </div>
+      </footer>
     </main>
   );
 }
