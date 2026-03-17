@@ -172,6 +172,17 @@ I am actively working on improving cross-browser support, but for now, we recomm
 
 The project is containerized with Docker and deploys to Google Cloud Run via Cloud Build:
 
+## Acknowledgements
+
+This project uses and adapts code from the TalkingHead project by Mika Suominen (met4citizen):
+https://github.com/met4citizen/TalkingHead
+
+The original project is licensed under the MIT License.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
 ```bash
 # Build and deploy (handled by cloudbuild.yaml)
 gcloud builds submit
