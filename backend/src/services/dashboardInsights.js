@@ -5,6 +5,11 @@ const { pool } = require('../db');
 const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 const ANALYSIS_MODEL = process.env.GEMINI_ANALYSIS_MODEL || config.geminiModel;
 const ANALYSIS_FALLBACK_MODEL = process.env.GEMINI_ANALYSIS_FALLBACK_MODEL || '';
+const ANALYSIS_MODEL_ROTATION = (process.env.GEMINI_ANALYSIS_MODEL_ROTATION
+  || 'gemini-3-pro,gemini-2.5-flash,gemini-2.5-pro')
+  .split(',')
+  .map((model) => model.trim())
+  .filter(Boolean);
 const DEFAULT_TIMEZONE = process.env.DASHBOARD_TIMEZONE || 'Asia/Kolkata';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -731,29 +736,34 @@ function isRetryableGeminiError(error) {
     || message.includes('timeout');
 }
 
-async function generateStructuredJson({ prompt, schema, label = 'structured-json', maxRetries = 3 }) {
-  const modelCandidates = [ANALYSIS_MODEL, ANALYSIS_FALLBACK_MODEL].filter(Boolean);
+function getAnalysisModelCandidates() {
+  return uniqueStrings([
+    ANALYSIS_MODEL,
+    ANALYSIS_FALLBACK_MODEL,
+    ...ANALYSIS_MODEL_ROTATION,
+  ], 12);
+}
+
+async function generateGeminiContent({
+  contents,
+  generationConfig = {},
+  label = 'generate-content',
+  maxRetries = 3,
+  modelCandidates = getAnalysisModelCandidates(),
+}) {
+  if (!modelCandidates.length) {
+    modelCandidates = [ANALYSIS_MODEL];
+  }
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const model = modelCandidates[Math.min(attempt, modelCandidates.length - 1)] || ANALYSIS_MODEL;
+    const model = modelCandidates[attempt % modelCandidates.length] || ANALYSIS_MODEL;
 
     try {
-      const response = await ai.models.generateContent({
+      return await ai.models.generateContent({
         model,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          temperature: 0.3,
-        },
+        contents,
+        config: generationConfig,
       });
-
-      const rawText = getResponseText(response);
-      const parsed = safeJsonParse(rawText);
-      if (!parsed) {
-        throw new Error('Gemini did not return valid JSON.');
-      }
-      return parsed;
     } catch (error) {
       const retryable = isRetryableGeminiError(error);
       const canRetry = retryable && attempt < maxRetries;
@@ -768,6 +778,26 @@ async function generateStructuredJson({ prompt, schema, label = 'structured-json
   }
 
   throw new Error('Gemini retries exhausted.');
+}
+
+async function generateStructuredJson({ prompt, schema, label = 'structured-json', maxRetries = 3 }) {
+  const response = await generateGeminiContent({
+    label,
+    maxRetries,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+      temperature: 0.3,
+    },
+  });
+
+  const rawText = getResponseText(response);
+  const parsed = safeJsonParse(rawText);
+  if (!parsed) {
+    throw new Error('Gemini did not return valid JSON.');
+  }
+  return parsed;
 }
 
 async function analyzeCallSession({ callId, userId }) {
@@ -1369,13 +1399,14 @@ async function compressMemoriesIfNeeded(userId, level) {
   const contentList = items.map((r, i) => `${i + 1}. ${r.content}`).join('\n');
   const oldestDate = items[0].bucket_date;
 
-  const compressRes = await ai.models.generateContent({
-    model: ANALYSIS_MODEL,
+  const compressRes = await generateGeminiContent({
+    label: 'memory-compress',
+    maxRetries: 4,
     contents: [{
       role: 'user',
       parts: [{ text: `Compress these ${items.length} personal insights about the same postpartum mom into 1 sentence (max 45 words), capturing the most important recurring patterns. Be specific, not generic.\n\n${contentList}\n\nCompressed insight:` }],
     }],
-    config: { temperature: 0.2, maxOutputTokens: 100 },
+    generationConfig: { temperature: 0.2, maxOutputTokens: 100 },
   });
 
   const compressed = getResponseText(compressRes)?.trim();
@@ -1423,13 +1454,14 @@ async function recordCallMemory({ callId, userId }) {
   const transcriptText = buildTranscriptText(msgRes.rows, userName, companionName);
 
   // Generate a 1-sentence insight about the user from this call
-  const insightRes = await ai.models.generateContent({
-    model: ANALYSIS_MODEL,
+  const insightRes = await generateGeminiContent({
+    label: 'memory-insight',
+    maxRetries: 4,
     contents: [{
       role: 'user',
       parts: [{ text: `From the following postpartum support conversation, extract ONE specific personal insight about the mom that would help a future companion support her better.\n\nRules:\n- One sentence only, max 28 words\n- Be specific and personal — not generic\n- Focus on: preferences, fears, joys, what helps her, what she finds hard, her situation or personality\n- If nothing meaningful is observable, reply with exactly: SKIP\n- Start with "She", "Prefers", or "Tends to"\n\nTranscript:\n${transcriptText}\n\nOne insight:` }],
     }],
-    config: { temperature: 0.3, maxOutputTokens: 70 },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 70 },
   });
 
   const newInsight = getResponseText(insightRes)?.trim();
@@ -1445,13 +1477,14 @@ async function recordCallMemory({ callId, userId }) {
 
   if (existing.rows.length) {
     // Merge today's existing insight + the new one into one updated sentence
-    const mergeRes = await ai.models.generateContent({
-      model: ANALYSIS_MODEL,
+    const mergeRes = await generateGeminiContent({
+      label: 'memory-merge',
+      maxRetries: 4,
       contents: [{
         role: 'user',
         parts: [{ text: `Combine these two personal insights about the same postpartum mom into one sentence (max 35 words), keeping the most specific details:\n1. ${existing.rows[0].content}\n2. ${newInsight}\n\nCombined insight:` }],
       }],
-      config: { temperature: 0.2, maxOutputTokens: 80 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
     });
     const merged = getResponseText(mergeRes)?.trim();
     const finalContent = merged || newInsight;
