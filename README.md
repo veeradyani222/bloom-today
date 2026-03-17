@@ -156,7 +156,7 @@ All tables are created automatically by the migration script (`npm run migrate`)
 
 ## Browser Compatibility
 
-Bloom currently provides the best experience on modern Chromium-based browsers such as Google Chrome and Microsoft Edge.
+Bloom Today currently provides the best experience on modern Chromium-based browsers such as Google Chrome and Microsoft Edge.
 
 ⚠️ **Safari (including iOS Safari) is not fully supported at this time.**
 
