@@ -9,9 +9,9 @@ steps:
       - '--build-arg'
       - 'VITE_GEMINI_API_KEY'
       - '-t'
-      - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
+      - 'europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
       - '-t'
-      - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:latest'
+      - 'europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:latest'
       - '-f'
       - '/workspace/frontend/Dockerfile'
       - '/workspace/frontend'
@@ -22,7 +22,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
+      - 'europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     args:
@@ -30,7 +30,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'bloom-frontend'
-      - '--image=europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
+      - '--image=europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
       - '--region=europe-west1'
       - '--platform=managed'
 
@@ -39,9 +39,9 @@ options:
 
 availableSecrets:
   secretManager:
-    - versionName: 'projects/bloom-mama-489613/secrets/VITE_GEMINI_API_KEY/versions/latest'
+    - versionName: 'projects/bloom-today/secrets/VITE_GEMINI_API_KEY/versions/latest'
       env: 'VITE_GEMINI_API_KEY'
 
 images:
-  - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
-  - 'europe-west1-docker.pkg.dev/bloom-mama-489613/cloud-run-source-deploy/bloom/bloom-frontend:latest'
+  - 'europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:$SHORT_SHA'
+  - 'europe-west1-docker.pkg.dev/bloom-today/cloud-run-source-deploy/bloom/bloom-frontend:latest'
