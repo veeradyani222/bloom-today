@@ -3,7 +3,6 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const { z } = require('zod');
-
 const { config } = require('./config');
 const { pool } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
