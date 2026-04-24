@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 
 app.use(
   cors({
-    origin: config.frontendOrigin,
+    origin: true,
     credentials: true,
   }),
 );
