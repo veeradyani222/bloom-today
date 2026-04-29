@@ -12,11 +12,10 @@ React, Vite, Express.js, Node.js, PostgreSQL, Neon, Google Gemini API, Google Ge
 
 ```text
 bloom-today/
-├── api/                # Vercel serverless entrypoint for the Express backend
-├── backend/            # Express API, migrations, and services
-├── frontend/           # React + Vite SPA
-├── vercel.json         # Vercel deployment config
-└── .vercelignore       # Files excluded from Vercel uploads
++-- backend/             # Express API, migrations, and services
++-- frontend/            # React + Vite SPA
++-- backend/vercel.json  # Backend Vercel deployment config
++-- frontend/vercel.json # Frontend Vercel deployment config
 ```
 
 ## Local Development
@@ -26,9 +25,9 @@ bloom-today/
 ```bash
 cd backend
 cp .env.example .env
-npm install
-npm run migrate
-npm run dev
+pnpm install
+pnpm migrate
+pnpm dev
 ```
 
 Backend env:
@@ -48,8 +47,8 @@ GEMINI_MODEL=gemini-2.5-pro
 ```bash
 cd frontend
 cp .env.example .env
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Frontend env:
@@ -65,14 +64,18 @@ Open `http://localhost:5000`.
 
 ## Vercel Deployment
 
-The repository is configured for Vercel at the root:
+Deploy the frontend and backend as two separate Vercel projects.
 
-- Install command: `npm install --prefix frontend && npm install --prefix backend`
-- Build command: `npm run build --prefix frontend`
-- Output directory: `frontend/dist`
-- Backend API: `api/index.js`, which serves the existing Express app under `/api/*`
+### Backend Project
 
-Set these environment variables in the Vercel project:
+When importing the GitHub repository in Vercel, set the project root directory to `backend`.
+
+- Install command: `pnpm install --frozen-lockfile`
+- Build command: leave empty
+- Output directory: leave empty
+- API entrypoint: `backend/api/index.js`
+
+Set these backend environment variables:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
@@ -80,17 +83,29 @@ GOOGLE_CLIENT_ID=your-google-oauth-web-client-id.apps.googleusercontent.com
 APP_JWT_SECRET=replace-with-a-long-random-string
 GEMINI_API_KEY=your-google-ai-studio-api-key
 GEMINI_MODEL=gemini-2.5-pro
-VITE_GOOGLE_CLIENT_ID=your-google-oauth-web-client-id.apps.googleusercontent.com
-VITE_GEMINI_API_KEY=your-gemini-api-key
-VITE_GEMINI_LIVE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025
 ```
-
-`VITE_API_BASE_URL` is optional on Vercel. If omitted, the frontend calls the same deployment at `/api`.
 
 Run database migrations before or after deploy with:
 
 ```bash
-npm run migrate --prefix backend
+pnpm --dir backend migrate
+```
+
+### Frontend Project
+
+Import the same GitHub repository again in Vercel and set the project root directory to `frontend`.
+
+- Install command: `pnpm install --frozen-lockfile`
+- Build command: `pnpm build`
+- Output directory: `dist`
+
+Set these frontend environment variables:
+
+```env
+VITE_API_BASE_URL=https://your-backend-vercel-domain.vercel.app
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-web-client-id.apps.googleusercontent.com
+VITE_GEMINI_API_KEY=your-gemini-api-key
+VITE_GEMINI_LIVE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025
 ```
 
 ## Acknowledgements
