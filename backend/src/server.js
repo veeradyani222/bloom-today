@@ -2025,6 +2025,10 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error.' });
 });
 
-app.listen(config.port, () => {
-  console.log(`Backend API running on http://localhost:${config.port}`);
-});
+if (require.main === module) {
+  app.listen(config.port, () => {
+    console.log(`Backend API running on http://localhost:${config.port}`);
+  });
+}
+
+module.exports = app;

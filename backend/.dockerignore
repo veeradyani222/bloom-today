@@ -1,6 +1,0 @@
-node_modules/
-.env
-.env.*
-npm-debug.log*
-pnpm-debug.log*
-*.log
