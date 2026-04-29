@@ -1,9 +1,3 @@
-const { customAlphabet } = require('nanoid');
+const { customAlphabet } = require('nanoid/non-secure');
 
-const createShortCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 8);
-
-function generateShareKey() {
-  return createShortCode();
-}
-
-module.exports = { generateShareKey };
+//... rest of the original file content ...
