@@ -1,70 +1,42 @@
-const { createUserContent } = require('@google/genai');
-const {
-  InMemoryRunner,
-  LlmAgent,
-  LogLevel,
-  setLogLevel,
-  isFinalResponse,
-  stringifyContent,
-} = require('@google/adk');
+const crypto = require('crypto');
+const { GoogleGenAI } = require('@google/genai');
 const { config } = require('../config');
 
-const APP_NAME = 'calmnest-companion';
-const runners = new Map();
-setLogLevel(LogLevel.ERROR);
+const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+const sessions = new Map();
 
 function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function getOrCreateRunner({ userId, companionName, companionInstructions }) {
-  const key = `${userId}:${companionName}:${companionInstructions || ''}`;
-  if (runners.has(key)) {
-    console.log(`[ADK] runner_reused key=${key.slice(0, 40)} model=${config.geminiModel}`);
-    return runners.get(key);
-  }
+function getResponseText(response) {
+  if (response?.text) return response.text;
+  const part = response?.candidates?.[0]?.content?.parts?.find((item) => typeof item?.text === 'string');
+  return part?.text || '';
+}
 
-  const agent = new LlmAgent({
-    name: `companion-${slugify(companionName || userId.slice(0, 8))}`.slice(0, 40),
-    model: config.geminiModel,
-    instruction: `
+function buildInstruction({ companionName, companionInstructions }) {
+  return `
 You are ${companionName}, a compassionate postpartum emotional support companion.
 Be warm, concise, and non-judgmental. Prioritize emotional safety and gentle check-ins.
 Do not provide medical diagnosis. Encourage reaching out to trusted people or therapists when needed.
 ${companionInstructions ? `User preference instructions: ${companionInstructions}` : ''}
-`.trim(),
-  });
-
-  const runner = new InMemoryRunner({
-    appName: APP_NAME,
-    agent,
-  });
-
-  console.log(`[ADK] runner_created agent=${agent.name} model=${config.geminiModel}`);
-  runners.set(key, runner);
-  return runner;
+`.trim();
 }
 
-async function ensureSession({ runner, userId, sessionId }) {
-  if (sessionId) {
-    console.log(`[ADK] session_lookup userId=${userId} sessionId=${sessionId}`);
-    const existing = await runner.sessionService.getSession({
-      appName: APP_NAME,
-      userId,
-      sessionId,
-    });
-    if (existing) {
-      console.log(`[ADK] session_reused userId=${userId} sessionId=${existing.id}`);
-      return existing.id;
-    }
+function getSession({ userId, sessionId }) {
+  if (sessionId && sessions.has(sessionId)) {
+    return {
+      id: sessionId,
+      history: sessions.get(sessionId),
+    };
   }
 
-  const created = await runner.sessionService.createSession({
-    appName: APP_NAME,
-    userId,
-  });
-  console.log(`[ADK] session_created userId=${userId} sessionId=${created.id}`);
-  return created.id;
+  const id = sessionId || crypto.randomUUID();
+  const history = [];
+  sessions.set(id, history);
+  console.log(`[GENAI] session_created userId=${userId} sessionId=${id}`);
+  return { id, history };
 }
 
 async function runCompanionTurn({
@@ -75,58 +47,57 @@ async function runCompanionTurn({
   message,
 }) {
   console.log(
-    `[ADK] turn_start userId=${userId} companion=${companionName} message_len=${message.length} sessionId=${sessionId || 'new'}`,
+    `[GENAI] turn_start userId=${userId} companion=${companionName} message_len=${message.length} sessionId=${sessionId || 'new'}`,
   );
-  const runner = getOrCreateRunner({ userId, companionName, companionInstructions });
-  const finalSessionId = await ensureSession({ runner, userId, sessionId });
 
-  let finalText = '';
-  let fallbackText = '';
-  let eventCount = 0;
-  for await (const event of runner.runAsync({
-    userId,
-    sessionId: finalSessionId,
-    newMessage: createUserContent(message),
-  })) {
-    eventCount += 1;
-    const anyText = stringifyContent(event).trim();
-    console.log(
-      `[ADK] event index=${eventCount} author=${event.author || 'unknown'} final=${isFinalResponse(event)} text_len=${anyText.length}`,
-    );
-    if (anyText) {
-      fallbackText = anyText;
-    }
+  const session = getSession({ userId, sessionId });
+  const contents = [
+    ...session.history,
+    {
+      role: 'user',
+      parts: [{ text: message }],
+    },
+  ];
 
-    if (isFinalResponse(event)) {
-      finalText = anyText || fallbackText;
-    }
-  }
+  const response = await ai.models.generateContent({
+    model: config.geminiModel,
+    contents,
+    config: {
+      systemInstruction: buildInstruction({ companionName, companionInstructions }),
+    },
+  });
 
-  if (!finalText && fallbackText) {
-    finalText = fallbackText;
-  }
-
-  if (!finalText) {
-    console.error(
-      `[ADK] turn_empty_response userId=${userId} sessionId=${finalSessionId} events=${eventCount}`,
-    );
+  const responseText = getResponseText(response).trim();
+  if (!responseText) {
+    console.error(`[GENAI] turn_empty_response userId=${userId} sessionId=${session.id}`);
     throw new Error(
-      'ADK did not return any text response. Check GEMINI_API_KEY, project quota, and model access.',
+      'Gemini did not return any text response. Check GEMINI_API_KEY, project quota, and model access.',
     );
   }
+
+  session.history.push(
+    {
+      role: 'user',
+      parts: [{ text: message }],
+    },
+    {
+      role: 'model',
+      parts: [{ text: responseText }],
+    },
+  );
 
   console.log(
-    `[ADK] turn_success userId=${userId} sessionId=${finalSessionId} events=${eventCount} response_len=${finalText.length}`,
+    `[GENAI] turn_success userId=${userId} sessionId=${session.id} response_len=${responseText.length}`,
   );
   return {
-    sessionId: finalSessionId,
-    responseText: finalText,
-    agentName: runner.agent.name,
+    sessionId: session.id,
+    responseText,
+    agentName: `companion-${slugify(companionName || userId.slice(0, 8))}`.slice(0, 40),
   };
 }
 
 async function createGoogleAdkCompanion({ userId, companionName, companionInstructions }) {
-  console.log(`[ADK] companion_create_start userId=${userId} companion=${companionName}`);
+  console.log(`[GENAI] companion_create_start userId=${userId} companion=${companionName}`);
   const kickoff = await runCompanionTurn({
     userId,
     companionName,
@@ -136,7 +107,7 @@ async function createGoogleAdkCompanion({ userId, companionName, companionInstru
   });
 
   return {
-    provider: 'google-adk',
+    provider: 'google-genai',
     agentId: kickoff.agentName,
     sessionId: kickoff.sessionId,
     welcomeMessage: kickoff.responseText,
