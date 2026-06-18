@@ -120,6 +120,7 @@ export function useVideoCall({
 
   // ── Transcript & analytics ──
   const callIdRef = useRef(null);
+  const callStartPromiseRef = useRef(null);
   const transcriptRef = useRef([]);
   const currentUserTextRef = useRef('');
   const currentAITextRef = useRef('');
@@ -401,35 +402,54 @@ export function useVideoCall({
     stopTimer();
 
     // Persist unsaved transcript messages and close the DB session
-    if (callIdRef.current && token) {
-      const finalCallId = callIdRef.current;
-      const unsaved = transcriptRef.current.slice(savedMsgCountRef.current);
-      void (async () => {
-        try {
-          if (unsaved.length > 0) {
-            await apiRequest(`/api/calls/${finalCallId}/messages`, {
-              method: 'POST',
-              token,
-              body: { messages: unsaved },
-            });
+    const finalMessages = [...transcriptRef.current];
+    const userText = currentUserTextRef.current.trim();
+    const aiText = currentAITextRef.current.trim();
+    if (userText) finalMessages.push({ role: 'user', content: userText });
+    if (aiText) finalMessages.push({ role: 'assistant', content: aiText });
+    const unsaved = finalMessages.slice(savedMsgCountRef.current);
+
+    const finalizePromise = token
+      ? (async () => {
+          try {
+            if (!callIdRef.current && callStartPromiseRef.current) {
+              await callStartPromiseRef.current;
+            }
+
+            if (!callIdRef.current) return;
+
+            const finalCallId = callIdRef.current;
+            try {
+              if (unsaved.length > 0) {
+                await apiRequest(`/api/calls/${finalCallId}/messages`, {
+                  method: 'POST',
+                  token,
+                  body: { messages: unsaved },
+                });
+              }
+            } finally {
+              await apiRequest(`/api/calls/${finalCallId}/end`, {
+                method: 'PUT',
+                token,
+                body: {},
+              });
+            }
+          } catch {
+            // Dashboard can still recover on the next completed call.
+          } finally {
+            callIdRef.current = null;
+            callStartPromiseRef.current = null;
           }
-        } catch {
-          // Non-blocking: still attempt to close the session record.
-        } finally {
-          apiRequest(`/api/calls/${finalCallId}/end`, {
-            method: 'PUT',
-            token,
-            body: {},
-          }).catch(() => {});
-        }
-      })();
-    }
+        })()
+      : Promise.resolve();
     callIdRef.current = null;
+    callStartPromiseRef.current = null;
     savedMsgCountRef.current = 0;
     transcriptRef.current = [];
     currentUserTextRef.current = '';
     currentAITextRef.current = '';
     turnCountRef.current = 0;
+    return finalizePromise;
   }, [stopRecorder, stopTimer, stopWebcam, token]);
 
   const registerClientListeners = useCallback((client) => {
@@ -581,9 +601,10 @@ export function useVideoCall({
   }, [decayRemoteVolume, performBargeIn, startFrameCapture, startTimer, stopRecorder, stopTimer, token]);
 
   const endCall = useCallback(() => {
-    cleanupCall(true);
+    const finalizePromise = cleanupCall(true);
     setError('');
     setCallState('idle');
+    return finalizePromise;
   }, [cleanupCall]);
 
   /* ── Start call ── */
@@ -610,12 +631,15 @@ export function useVideoCall({
     currentAITextRef.current = '';
     turnCountRef.current = 0;
     savedMsgCountRef.current = 0;
+    callStartPromiseRef.current = null;
 
     if (token) {
-      // Create DB session (fire-and-forget)
-      apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'video' } })
-        .then((data) => { callIdRef.current = data.callId; })
-        .catch(() => {});
+      callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'video' } })
+        .then((data) => {
+          callIdRef.current = data.callId;
+          return data.callId;
+        })
+        .catch(() => null);
     }
 
     try {

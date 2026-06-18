@@ -4,6 +4,10 @@ import { apiRequest } from '../lib/api';
 const dashboardCache = new Map();
 const DASHBOARD_CACHE_VERSION = 'v2-resources-embed-check';
 
+export function clearDashboardCache() {
+  dashboardCache.clear();
+}
+
 function buildCacheKey(token, role) {
   return `${DASHBOARD_CACHE_VERSION}::${token || 'anon'}::${role || 'mom'}`;
 }

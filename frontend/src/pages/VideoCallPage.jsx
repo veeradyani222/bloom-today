@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, ChevronLeft, Video, VideoOff } from 'lucide-react';
 import { useVideoCall } from '../hooks/useVideoCall';
+import { clearDashboardCache } from './useDashboardData';
 import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
@@ -206,13 +207,15 @@ export function VideoCallPage({ token, session }) {
 
   const statusText = formattedDuration;
 
-  function handleEndCall() {
-    endCall();
+  async function handleEndCall() {
+    await endCall();
+    clearDashboardCache();
     navigate('/dashboard', { replace: true });
   }
 
-  function handleGoBack() {
-    endCall();
+  async function handleGoBack() {
+    await endCall();
+    clearDashboardCache();
     navigate('/dashboard', { replace: true });
   }
 

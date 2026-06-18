@@ -626,9 +626,28 @@ async function getDashboardSourceData({ userId }) {
     }))
     .filter((row) => row.analysis && row.analysis.signalScores);
 
+  const callSessionsRes = await pool.query(
+    `
+    SELECT call_type, started_at, ended_at
+    FROM call_sessions
+    WHERE user_id = $1
+      AND ended_at IS NOT NULL
+    ORDER BY ended_at DESC, started_at DESC
+    LIMIT 180
+    `,
+    [userId],
+  );
+
+  const callSessions = callSessionsRes.rows.map((row) => ({
+    callType: row.call_type,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+  }));
+
   return {
     user: userRes.rows[0],
     analyses,
+    callSessions,
   };
 }
 
@@ -985,6 +1004,24 @@ function buildTrendPoints(items, timeZone = DEFAULT_TIMEZONE, days = 7) {
   }));
 }
 
+function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now() }) {
+  const source = [...(callSessions.length ? callSessions : analyses)].sort(
+    (left, right) =>
+      new Date(right.endedAt || right.startedAt).getTime() - new Date(left.endedAt || left.startedAt).getTime(),
+  );
+  const daily = source.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= DAY_MS);
+  const weekly = source.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= 7 * DAY_MS);
+  const monthly = source.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= 30 * DAY_MS);
+
+  return {
+    totalCalls: source.length,
+    callsToday: daily.length,
+    callsThisWeek: weekly.length,
+    callsThisMonth: monthly.length,
+    lastCallAt: source[0]?.endedAt || source[0]?.startedAt || null,
+  };
+}
+
 async function generateRollupNarratives({ userName, analyses, timeZone }) {
   const rows = analyses.slice(-30).map((item) => ({
     day: dayKey(item.endedAt || item.startedAt, timeZone),
@@ -1217,12 +1254,13 @@ Respond as JSON with:
 }
 
 async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_TIMEZONE }) {
-  const { user, analyses } = await getDashboardSourceData({ userId });
+  const { user, analyses, callSessions } = await getDashboardSourceData({ userId });
 
   const now = Date.now();
   const daily = analyses.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= DAY_MS);
   const weekly = analyses.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= 7 * DAY_MS);
   const monthly = analyses.filter((item) => now - new Date(item.endedAt || item.startedAt).getTime() <= 30 * DAY_MS);
+  const activity = buildActivitySummary({ analyses, callSessions, now });
 
   const trendPoints = buildTrendPoints(monthly, timeZone, 7);
   const rollups = {
@@ -1261,13 +1299,7 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
     generatedAt: new Date().toISOString(),
     timeZone,
     hasData: analyses.length > 0,
-    activity: {
-      totalCalls: analyses.length,
-      callsToday: daily.length,
-      callsThisWeek: weekly.length,
-      callsThisMonth: monthly.length,
-      lastCallAt: analyses[0]?.endedAt || analyses[0]?.startedAt || null,
-    },
+    activity,
     mom: {
       current: analyses[0]?.analysis || null,
       narratives: narratives?.mom || null,
@@ -1512,4 +1544,7 @@ module.exports = {
   getDashboardInsights,
   getMoodPointSeries,
   recordCallMemory,
+  _private: {
+    buildActivitySummary,
+  },
 };

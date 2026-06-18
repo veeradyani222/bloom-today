@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, ChevronLeft, Video, ArrowLeft } from 'lucide-react';
 import { useCompanionCall } from '../hooks/useCompanionCall';
+import { clearDashboardCache } from './useDashboardData';
 import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
@@ -164,13 +165,15 @@ export function VoiceCallPage({ token, session }) {
     prevCallState.current = callState;
   }, [callState, navigate]);
 
-  function handleEndCall() {
-    endCall();
+  async function handleEndCall() {
+    await endCall();
+    clearDashboardCache();
     navigate('/dashboard', { replace: true });
   }
 
-  function handleSwitchToVideo() {
-    endCall();
+  async function handleSwitchToVideo() {
+    await endCall();
+    clearDashboardCache();
     navigate('/video-call', { replace: true, state: { autostartVideo: true } });
   }
 
@@ -185,8 +188,9 @@ export function VoiceCallPage({ token, session }) {
     startCall();
   }
 
-  function handleGoBack() {
-    endCall();
+  async function handleGoBack() {
+    await endCall();
+    clearDashboardCache();
     navigate('/dashboard', { replace: true });
   }
 

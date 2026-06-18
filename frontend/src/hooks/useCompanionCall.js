@@ -109,6 +109,7 @@ export function useCompanionCall({
 
   // ── Transcript & analytics ──
   const callIdRef = useRef(null);           // DB call session id
+  const callStartPromiseRef = useRef(null); // Pending DB session creation
   const transcriptRef = useRef([]);         // [{role, content}] for the whole call
   const currentUserTextRef = useRef('');    // Accumulates user speech this turn
   const currentAITextRef = useRef('');      // Accumulates AI speech this turn
@@ -295,41 +296,61 @@ export function useCompanionCall({
     stopTimer();
 
     // Persist any unsaved transcript messages and close the DB session
-    if (callIdRef.current && token) {
-      const finalCallId = callIdRef.current;
-      const unsaved = transcriptRef.current.slice(savedMsgCountRef.current);
-      void (async () => {
-        try {
-          if (unsaved.length > 0) {
-            await apiRequest(`/api/calls/${finalCallId}/messages`, {
-              method: 'POST',
-              token,
-              body: { messages: unsaved },
-            });
+    const finalMessages = [...transcriptRef.current];
+    const userText = currentUserTextRef.current.trim();
+    const aiText = currentAITextRef.current.trim();
+    if (userText) finalMessages.push({ role: 'user', content: userText });
+    if (aiText) finalMessages.push({ role: 'assistant', content: aiText });
+    const unsaved = finalMessages.slice(savedMsgCountRef.current);
+
+    const finalizePromise = token
+      ? (async () => {
+          try {
+            if (!callIdRef.current && callStartPromiseRef.current) {
+              await callStartPromiseRef.current;
+            }
+
+            if (!callIdRef.current) return;
+
+            const finalCallId = callIdRef.current;
+            try {
+              if (unsaved.length > 0) {
+                await apiRequest(`/api/calls/${finalCallId}/messages`, {
+                  method: 'POST',
+                  token,
+                  body: { messages: unsaved },
+                });
+              }
+            } finally {
+              await apiRequest(`/api/calls/${finalCallId}/end`, {
+                method: 'PUT',
+                token,
+                body: {},
+              });
+            }
+          } catch {
+            // Dashboard can still recover on the next completed call.
+          } finally {
+            callIdRef.current = null;
+            callStartPromiseRef.current = null;
           }
-        } catch {
-          // Non-blocking: still attempt to close the session record.
-        } finally {
-          apiRequest(`/api/calls/${finalCallId}/end`, {
-            method: 'PUT',
-            token,
-            body: {},
-          }).catch(() => {});
-        }
-      })();
-    }
+        })()
+      : Promise.resolve();
     callIdRef.current = null;
+    callStartPromiseRef.current = null;
     savedMsgCountRef.current = 0;
     transcriptRef.current = [];
     currentUserTextRef.current = '';
     currentAITextRef.current = '';
     turnCountRef.current = 0;
+    return finalizePromise;
   }, [stopRecorder, stopTimer, token]);
 
   const endCall = useCallback(() => {
-    cleanupCall(true);
+    const finalizePromise = cleanupCall(true);
     setError('');
     setCallState('idle');
+    return finalizePromise;
   }, [cleanupCall]);
 
   /* ── Start call ── */
@@ -356,12 +377,15 @@ export function useCompanionCall({
     currentAITextRef.current = '';
     turnCountRef.current = 0;
     savedMsgCountRef.current = 0;
+    callStartPromiseRef.current = null;
 
     if (token) {
-      // Create a DB session record (fire-and-forget)
-      apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'voice' } })
-        .then((data) => { callIdRef.current = data.callId; })
-        .catch(() => {});
+      callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'voice' } })
+        .then((data) => {
+          callIdRef.current = data.callId;
+          return data.callId;
+        })
+        .catch(() => null);
     }
 
     try {
