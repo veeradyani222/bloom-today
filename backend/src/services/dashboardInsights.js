@@ -1010,6 +1010,10 @@ function logOptionalAiFallback(label, error) {
   console.warn(`[DASHBOARD] ${label}_fallback reason=ai_generation_failed status=${getErrorStatus(error) || 'n/a'} message="${String(error?.message || 'unknown').slice(0, 220)}"`);
 }
 
+function isOptionalDashboardAiEnabled() {
+  return String(process.env.ENABLE_OPTIONAL_DASHBOARD_AI || '').toLowerCase() === 'true';
+}
+
 function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now() }) {
   const source = [...(callSessions.length ? callSessions : analyses)].sort(
     (left, right) =>
@@ -1029,6 +1033,10 @@ function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now
 }
 
 async function generateRollupNarratives({ userName, analyses, timeZone }) {
+  if (!isOptionalDashboardAiEnabled()) {
+    return null;
+  }
+
   const rows = analyses.slice(-30).map((item) => ({
     day: dayKey(item.endedAt || item.startedAt, timeZone),
     callType: item.callType,
@@ -1071,7 +1079,7 @@ async function getContextualQuickTips({ userId, timeZone = DEFAULT_TIMEZONE }) {
   const { user, analyses } = await getDashboardSourceData({ userId });
   const fallback = buildFallbackQuickTips({ analyses });
 
-  if (!analyses.length) {
+  if (!analyses.length || !isOptionalDashboardAiEnabled()) {
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1159,8 +1167,8 @@ Respond as JSON with:
 async function getConversationResourceRecommendations({ user, analyses, timeZone = DEFAULT_TIMEZONE }) {
   const fallback = buildFallbackResourceRecommendations();
 
-  if (!analyses.length) {
-    console.log('[DASHBOARD] resources_fallback reason=no_analyses');
+  if (!analyses.length || !isOptionalDashboardAiEnabled()) {
+    console.log(`[DASHBOARD] resources_fallback reason=${analyses.length ? 'optional_ai_disabled' : 'no_analyses'}`);
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1554,6 +1562,7 @@ module.exports = {
     buildActivitySummary,
     getAnalysisModelCandidates,
     hasDashboardData,
+    isOptionalDashboardAiEnabled,
     isRetryableGeminiError,
   },
 };
