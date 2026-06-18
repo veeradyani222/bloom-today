@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TalkingHead Quick Animations</title>
+  <style>
+    :root {
+      --bg: #0f1216;
+      --panel: #151a21;
+      --text: #d7e0ea;
+      --muted: #94a3b8;
+      --accent: #3bd6a6;
+      --border: #263040;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+    .wrap {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      height: 100%;
+      padding: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      overflow: auto;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+      color: var(--accent);
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 6px 0;
+    }
+    select, button {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #0f141b;
+      color: var(--text);
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+      background: #0f141b;
+    }
+    button.primary {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .row { display: grid; gap: 8px; margin-top: 10px; }
+    #avatar {
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      background: #0b0f14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #0f141b;
+      color: var(--muted);
+      font-size: 12px;
+      min-height: 34px;
+      white-space: pre-wrap;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "talkinghead": "../modules/talkinghead.mjs"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Quick Animations</h1>
+
+      <label for="avatarSel">Avatar</label>
+      <select id="avatarSel"></select>
+
+      <label for="poseSel">Pose</label>
+      <select id="poseSel"></select>
+      <div class="row">
+        <button id="poseBtn" class="primary">Play Pose</button>
+        <button id="poseStop">Stop Pose</button>
+      </div>
+
+      <label for="gestureSel">Gesture</label>
+      <select id="gestureSel"></select>
+      <div class="row">
+        <button id="gestureBtn" class="primary">Play Gesture</button>
+        <button id="gestureStop">Stop Gesture</button>
+      </div>
+
+      <label for="animSel">Animation</label>
+      <select id="animSel"></select>
+      <div class="row">
+        <button id="animBtn" class="primary">Play Animation</button>
+        <button id="animStop">Stop Animation</button>
+      </div>
+
+      <div class="note">
+        This page uses only local assets and doesn’t require any API keys.
+      </div>
+      <div id="status" class="status">Status: ready</div>
+    </div>
+
+    <div id="avatar"></div>
+  </div>
+
+  <script type="module">
+    import { TalkingHead } from "talkinghead";
+    import { site } from "../siteconfig.js";
+
+    const avatarSel = document.getElementById("avatarSel");
+    const poseSel = document.getElementById("poseSel");
+    const gestureSel = document.getElementById("gestureSel");
+    const animSel = document.getElementById("animSel");
+    const avatarNode = document.getElementById("avatar");
+    const statusNode = document.getElementById("status");
+
+    function setStatus(msg) {
+      statusNode.textContent = `Status: ${msg}`;
+    }
+
+    window.addEventListener("error", (e) => {
+      setStatus(`error: ${e.message}`);
+      console.error(e);
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      setStatus(`unhandled: ${e.reason?.message || e.reason}`);
+      console.error(e.reason);
+    });
+
+    const ROOT = "..";
+
+    function withRoot(url) {
+      if (url.startsWith("http") || url.startsWith(`${ROOT}/`) || !url.startsWith("./")) {
+        return url;
+      }
+      return `${ROOT}/${url.slice(2)}`;
+    }
+
+    function fillSelect(sel, entries) {
+      sel.innerHTML = "";
+      for (const name of entries) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    }
+
+    fillSelect(avatarSel, Object.keys(site.avatars));
+    fillSelect(poseSel, Object.keys(site.poses));
+    fillSelect(gestureSel, Object.keys(site.gestures));
+    fillSelect(animSel, Object.keys(site.animations));
+
+    let head;
+    async function loadAvatar(name) {
+      try {
+        setStatus(`loading avatar: ${name}`);
+        if (!head) {
+          head = new TalkingHead(avatarNode, {
+            cameraView: "full",
+            avatarMood: "neutral",
+            modelPixelRatio: window.devicePixelRatio || 1
+          });
+        }
+        const opt = { ...site.avatars[name] };
+        opt.url = withRoot(opt.url);
+        await head.showAvatar(opt);
+        setStatus(`loaded avatar: ${name}`);
+      } catch (err) {
+        setStatus(`avatar load failed: ${err?.message || err}`);
+      }
+    }
+
+    try {
+      await loadAvatar(avatarSel.value);
+    } catch (e) {
+      setStatus(`init failed: ${e?.message || e}`);
+      console.error(e);
+    }
+
+    avatarSel.addEventListener("change", async () => {
+      await loadAvatar(avatarSel.value);
+    });
+
+    document.getElementById("poseBtn").addEventListener("click", () => {
+      const p = withRoot(site.poses[poseSel.value].url);
+      head.playPose(p, null, 6);
+    });
+    document.getElementById("poseStop").addEventListener("click", () => head.stopPose());
+
+    document.getElementById("gestureBtn").addEventListener("click", () => {
+      const g = site.gestures[gestureSel.value].name;
+      head.playGesture(g, 3);
+    });
+    document.getElementById("gestureStop").addEventListener("click", () => head.stopGesture());
+
+    document.getElementById("animBtn").addEventListener("click", () => {
+      const a = withRoot(site.animations[animSel.value].url);
+      head.playAnimation(a, null, 7);
+    });
+    document.getElementById("animStop").addEventListener("click", () => head.stopAnimation());
+  </script>
+</body>
+</html>
