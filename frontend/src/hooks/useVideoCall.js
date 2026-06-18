@@ -119,6 +119,7 @@ export function useVideoCall({
   const captureCanvasRef = useRef(null);
 
   // ── Transcript & analytics ──
+  const callDurationRef = useRef(0);         // Mirror of callDuration state for use in callbacks
   const callIdRef = useRef(null);
   const callStartPromiseRef = useRef(null);
   const transcriptRef = useRef([]);
@@ -145,8 +146,10 @@ export function useVideoCall({
   /* ── Timer ── */
   const startTimer = useCallback(() => {
     setCallDuration(0);
+    callDurationRef.current = 0;
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     timerIntervalRef.current = setInterval(() => {
+      callDurationRef.current += 1;
       setCallDuration((prev) => prev + 1);
     }, 1000);
   }, []);
@@ -464,6 +467,12 @@ export function useVideoCall({
       setCallState('connected');
       startTimer();
       startFrameCapture();
+      pendo.track('video_call_started', {
+        companion_name: companionName,
+        companion_voice_name: companionVoiceName,
+        call_id: callIdRef.current || '',
+        video_enabled: true,
+      });
     };
 
     const onClose = (event) => {
@@ -601,11 +610,20 @@ export function useVideoCall({
   }, [decayRemoteVolume, performBargeIn, startFrameCapture, startTimer, stopRecorder, stopTimer, token]);
 
   const endCall = useCallback(() => {
+    pendo.track('video_call_ended', {
+      call_duration_seconds: callDurationRef.current,
+      turn_count: turnCountRef.current,
+      transcript_message_count: transcriptRef.current.length,
+      companion_name: companionName,
+      call_id: callIdRef.current || '',
+      video_enabled_at_end: videoEnabled,
+      was_intentional_hangup: true,
+    });
     const finalizePromise = cleanupCall(true);
     setError('');
     setCallState('idle');
     return finalizePromise;
-  }, [cleanupCall]);
+  }, [cleanupCall, companionName, videoEnabled]);
 
   /* ── Start call ── */
   const startCall = useCallback(async () => {

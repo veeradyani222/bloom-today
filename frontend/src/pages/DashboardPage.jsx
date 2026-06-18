@@ -743,6 +743,9 @@ export function JournalPromptCard({ token }) {
     if (!entry.trim()) return;
     try {
       await apiRequest('/api/mom-tips', { token, method: 'POST', body: { tip: entry.trim() } });
+      pendo.track('mom_tip_submitted', {
+        tip_length: entry.trim().length,
+      });
       setSent(true);
     } catch {
       setSent(true);
@@ -1090,6 +1093,10 @@ export function TherapistDashboard({ data, token, daySeries, firstName, activity
         },
       });
       setExistingNote(result.note || null);
+      pendo.track('therapist_note_sent', {
+        message_length: message.trim().length,
+        patient_name: patientName,
+      });
       setMessage('');
       setMessageStatus(`Note sent to ${patientName}.`);
     } catch (error) {
@@ -1116,6 +1123,10 @@ export function TherapistDashboard({ data, token, daySeries, firstName, activity
         },
       });
       setExistingNote(result.note || null);
+      pendo.track('therapist_companion_instruction_sent', {
+        instruction_length: instruction.trim().length,
+        patient_name: patientName,
+      });
       setInstruction('');
       setInstructionStatus('Companion instruction sent.');
     } catch (error) {
@@ -1237,6 +1248,10 @@ export function TrustedDashboard({ data, token, daySeries, firstName, activity }
         body: { message: message.trim() },
       });
       setExistingNote(result.note || null);
+      pendo.track('trusted_note_sent', {
+        message_length: message.trim().length,
+        patient_name: patientName,
+      });
       setMessage('');
       setMsgStatus('Message sent!');
     } catch (error) {

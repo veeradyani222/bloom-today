@@ -89,6 +89,10 @@ export function RoleSelectionPage({
 
         setSession(nextSession);
         saveSession(nextSession);
+        pendo.track('support_role_switched', {
+          target_role: selectedRole,
+          previous_role: session?.user?.auth_role || 'mom',
+        });
         navigate('/dashboard', { replace: true });
       } catch (submitError) {
         setError(submitError.message || 'Could not switch role right now.');
@@ -139,6 +143,11 @@ export function RoleSelectionPage({
     });
 
     if (user) {
+      pendo.track('role_sign_in_completed', {
+        selected_role: selectedRole,
+        has_support_key: Boolean(supportKey.trim()),
+        is_new_user: !user.onboarding_completed,
+      });
       if (selectedRole !== 'mom' && !user.full_name) {
         setShowNameEntry(true);
       } else {

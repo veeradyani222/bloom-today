@@ -199,6 +199,14 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
       setSession(updated);
       saveSession(updated);
       setRegistered(true);
+      pendo.track('onboarding_completed', {
+        companion_name: form.companionName.trim(),
+        companion_avatar_id: form.companionAvatarId,
+        companion_voice_name: form.companionVoiceName,
+        has_companion_instructions: Boolean(form.companionInstructions.trim()),
+        baby_age_weeks: Number(form.babyAgeWeeks),
+        seeing_doctor: Boolean(form.seeingDoctor),
+      });
     } catch (submitError) {
       setError(submitError.message);
     } finally {
