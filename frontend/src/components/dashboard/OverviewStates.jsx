@@ -47,6 +47,37 @@ export function OverviewEmptyState({ illustration }) {
   );
 }
 
+export function OverviewPendingAnalysisState({ illustration, activity }) {
+  const totalCalls = activity?.totalCalls || 0;
+  const callsToday = activity?.callsToday || 0;
+  const callsThisWeek = activity?.callsThisWeek || 0;
+
+  return (
+    <section className="dash-empty-state">
+      <img src={illustration} alt="" className="dash-empty-illustration" />
+      <h2>{totalCalls === 1 ? 'Your first call is saved' : 'Your calls are saved'}</h2>
+      <p>Bloom is still preparing reflections from your conversation. Your activity is already counted.</p>
+      <div className="sec-stats-grid">
+        <div className="sec-stat-card peach">
+          <span>Today</span>
+          <strong>{callsToday}</strong>
+          <p>calls so far</p>
+        </div>
+        <div className="sec-stat-card sage">
+          <span>This week</span>
+          <strong>{callsThisWeek}</strong>
+          <p>calls joined</p>
+        </div>
+        <div className="sec-stat-card mist">
+          <span>Total</span>
+          <strong>{totalCalls}</strong>
+          <p>moments shared</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function OverviewLoading() {
   return <CenteredDashboardLoader />;
 }

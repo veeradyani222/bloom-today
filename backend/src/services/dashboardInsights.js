@@ -1006,6 +1006,10 @@ function buildTrendPoints(items, timeZone = DEFAULT_TIMEZONE, days = 7) {
   }));
 }
 
+function logOptionalAiFallback(label, error) {
+  console.warn(`[DASHBOARD] ${label}_fallback reason=ai_generation_failed status=${getErrorStatus(error) || 'n/a'} message="${String(error?.message || 'unknown').slice(0, 220)}"`);
+}
+
 function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now() }) {
   const source = [...(callSessions.length ? callSessions : analyses)].sort(
     (left, right) =>
@@ -1059,7 +1063,7 @@ ${JSON.stringify(rows)}
     prompt,
     schema: rollupSchema,
     label: 'rollup-narratives',
-    maxRetries: 3,
+    maxRetries: 0,
   });
 }
 
@@ -1133,7 +1137,7 @@ Respond as JSON with:
       prompt,
       schema: quickTipsSchema,
       label: 'quick-tips',
-      maxRetries: 4,
+      maxRetries: 0,
     });
     return {
       generatedAt: new Date().toISOString(),
@@ -1142,7 +1146,7 @@ Respond as JSON with:
       ...normalizeQuickTips(generated, fallback),
     };
   } catch (error) {
-    console.error('[DASHBOARD] quick_tips_generation_error', error);
+    logOptionalAiFallback('quick_tips', error);
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1209,7 +1213,7 @@ Respond as JSON with:
       prompt,
       schema: resourceRecommendationsSchema,
       label: 'resources',
-      maxRetries: 4,
+      maxRetries: 0,
     });
     const generatedCount = Array.isArray(generated?.resources) ? generated.resources.length : 0;
     console.log(`[DASHBOARD] resources_ai_generated count=${generatedCount}`);
@@ -1241,11 +1245,7 @@ Respond as JSON with:
       resources: finalResources,
     };
   } catch (error) {
-    console.error('[DASHBOARD] resources_generation_error', {
-      message: error?.message,
-      stack: error?.stack,
-    });
-    console.log('[DASHBOARD] resources_fallback reason=generation_error');
+    logOptionalAiFallback('resources', error);
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1253,6 +1253,10 @@ Respond as JSON with:
       ...fallback,
     };
   }
+}
+
+function hasDashboardData({ analyses = [], activity = {} }) {
+  return analyses.length > 0 || Number(activity.totalCalls || 0) > 0;
 }
 
 async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_TIMEZONE }) {
@@ -1280,7 +1284,7 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
         timeZone,
       });
     } catch (error) {
-      console.error('[DASHBOARD] narrative_generation_error', error);
+      logOptionalAiFallback('narratives', error);
     }
   }
 
@@ -1300,7 +1304,7 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
     role: role || user.preferred_dashboard_role || 'mom',
     generatedAt: new Date().toISOString(),
     timeZone,
-    hasData: analyses.length > 0,
+    hasData: hasDashboardData({ analyses, activity }),
     activity,
     mom: {
       current: analyses[0]?.analysis || null,
@@ -1549,6 +1553,7 @@ module.exports = {
   _private: {
     buildActivitySummary,
     getAnalysisModelCandidates,
+    hasDashboardData,
     isRetryableGeminiError,
   },
 };

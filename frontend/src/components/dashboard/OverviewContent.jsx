@@ -7,7 +7,7 @@ import { OverviewHeroSection } from './OverviewHeroSection';
 import { OverviewMoodSection } from './OverviewMoodSection';
 import { OverviewResourcesSection } from './OverviewResourcesSection';
 import { OverviewScoreSection } from './OverviewScoreSection';
-import { OverviewEmptyState } from './OverviewStates';
+import { OverviewEmptyState, OverviewPendingAnalysisState } from './OverviewStates';
 
 function MomOverviewContent({
   data,
@@ -23,8 +23,12 @@ function MomOverviewContent({
 }) {
   const week = data?.week;
   const current = data?.current;
+  const activity = insights?.activity || {};
 
   if (!current) {
+    if ((activity.totalCalls || 0) > 0) {
+      return <OverviewPendingAnalysisState illustration={welcomeIllustration} activity={activity} />;
+    }
     return <OverviewEmptyState illustration={welcomeIllustration} />;
   }
 

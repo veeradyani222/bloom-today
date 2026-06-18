@@ -43,3 +43,9 @@ test('Gemini model-not-found errors are retryable so fallback candidates can run
 
   assert.equal(_private.isRetryableGeminiError(error), true);
 });
+
+test('dashboard hasData is true when completed calls exist before analysis', () => {
+  assert.equal(_private.hasDashboardData({ analyses: [], activity: { totalCalls: 1 } }), true);
+  assert.equal(_private.hasDashboardData({ analyses: [{ callId: 'call-1' }], activity: { totalCalls: 0 } }), true);
+  assert.equal(_private.hasDashboardData({ analyses: [], activity: { totalCalls: 0 } }), false);
+});
