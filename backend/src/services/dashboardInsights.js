@@ -10,6 +10,7 @@ const ANALYSIS_MODEL_ROTATION = (process.env.GEMINI_ANALYSIS_MODEL_ROTATION
   .split(',')
   .map((model) => model.trim())
   .filter(Boolean);
+const OPTIONAL_DASHBOARD_MODEL_CANDIDATES = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
 const DEFAULT_TIMEZONE = process.env.DASHBOARD_TIMEZONE || 'Asia/Kolkata';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -801,10 +802,11 @@ async function generateGeminiContent({
   throw new Error('Gemini retries exhausted.');
 }
 
-async function generateStructuredJson({ prompt, schema, label = 'structured-json', maxRetries = 3 }) {
+async function generateStructuredJson({ prompt, schema, label = 'structured-json', maxRetries = 3, modelCandidates }) {
   const response = await generateGeminiContent({
     label,
     maxRetries,
+    modelCandidates,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: 'application/json',
@@ -1010,8 +1012,8 @@ function logOptionalAiFallback(label, error) {
   console.warn(`[DASHBOARD] ${label}_fallback reason=ai_generation_failed status=${getErrorStatus(error) || 'n/a'} message="${String(error?.message || 'unknown').slice(0, 220)}"`);
 }
 
-function isOptionalDashboardAiEnabled() {
-  return String(process.env.ENABLE_OPTIONAL_DASHBOARD_AI || '').toLowerCase() === 'true';
+function getOptionalDashboardModelCandidates() {
+  return OPTIONAL_DASHBOARD_MODEL_CANDIDATES;
 }
 
 function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now() }) {
@@ -1033,10 +1035,6 @@ function buildActivitySummary({ analyses = [], callSessions = [], now = Date.now
 }
 
 async function generateRollupNarratives({ userName, analyses, timeZone }) {
-  if (!isOptionalDashboardAiEnabled()) {
-    return null;
-  }
-
   const rows = analyses.slice(-30).map((item) => ({
     day: dayKey(item.endedAt || item.startedAt, timeZone),
     callType: item.callType,
@@ -1071,7 +1069,8 @@ ${JSON.stringify(rows)}
     prompt,
     schema: rollupSchema,
     label: 'rollup-narratives',
-    maxRetries: 0,
+    maxRetries: getOptionalDashboardModelCandidates().length - 1,
+    modelCandidates: getOptionalDashboardModelCandidates(),
   });
 }
 
@@ -1079,7 +1078,7 @@ async function getContextualQuickTips({ userId, timeZone = DEFAULT_TIMEZONE }) {
   const { user, analyses } = await getDashboardSourceData({ userId });
   const fallback = buildFallbackQuickTips({ analyses });
 
-  if (!analyses.length || !isOptionalDashboardAiEnabled()) {
+  if (!analyses.length) {
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1145,7 +1144,8 @@ Respond as JSON with:
       prompt,
       schema: quickTipsSchema,
       label: 'quick-tips',
-      maxRetries: 0,
+      maxRetries: getOptionalDashboardModelCandidates().length - 1,
+      modelCandidates: getOptionalDashboardModelCandidates(),
     });
     return {
       generatedAt: new Date().toISOString(),
@@ -1167,8 +1167,8 @@ Respond as JSON with:
 async function getConversationResourceRecommendations({ user, analyses, timeZone = DEFAULT_TIMEZONE }) {
   const fallback = buildFallbackResourceRecommendations();
 
-  if (!analyses.length || !isOptionalDashboardAiEnabled()) {
-    console.log(`[DASHBOARD] resources_fallback reason=${analyses.length ? 'optional_ai_disabled' : 'no_analyses'}`);
+  if (!analyses.length) {
+    console.log('[DASHBOARD] resources_fallback reason=no_analyses');
     return {
       generatedAt: new Date().toISOString(),
       timeZone,
@@ -1221,7 +1221,8 @@ Respond as JSON with:
       prompt,
       schema: resourceRecommendationsSchema,
       label: 'resources',
-      maxRetries: 0,
+      maxRetries: getOptionalDashboardModelCandidates().length - 1,
+      modelCandidates: getOptionalDashboardModelCandidates(),
     });
     const generatedCount = Array.isArray(generated?.resources) ? generated.resources.length : 0;
     console.log(`[DASHBOARD] resources_ai_generated count=${generatedCount}`);
@@ -1561,8 +1562,8 @@ module.exports = {
   _private: {
     buildActivitySummary,
     getAnalysisModelCandidates,
+    getOptionalDashboardModelCandidates,
     hasDashboardData,
-    isOptionalDashboardAiEnabled,
     isRetryableGeminiError,
   },
 };

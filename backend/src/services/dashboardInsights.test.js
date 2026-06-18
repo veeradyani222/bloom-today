@@ -50,18 +50,6 @@ test('dashboard hasData is true when completed calls exist before analysis', () 
   assert.equal(_private.hasDashboardData({ analyses: [], activity: { totalCalls: 0 } }), false);
 });
 
-test('optional dashboard AI is disabled unless explicitly enabled', () => {
-  const previous = process.env.ENABLE_OPTIONAL_DASHBOARD_AI;
-  delete process.env.ENABLE_OPTIONAL_DASHBOARD_AI;
-
-  assert.equal(_private.isOptionalDashboardAiEnabled(), false);
-
-  process.env.ENABLE_OPTIONAL_DASHBOARD_AI = 'true';
-  assert.equal(_private.isOptionalDashboardAiEnabled(), true);
-
-  if (previous === undefined) {
-    delete process.env.ENABLE_OPTIONAL_DASHBOARD_AI;
-  } else {
-    process.env.ENABLE_OPTIONAL_DASHBOARD_AI = previous;
-  }
+test('optional dashboard AI uses low-cost models without extra environment configuration', () => {
+  assert.deepEqual(_private.getOptionalDashboardModelCandidates(), ['gemini-2.5-flash-lite', 'gemini-2.5-flash']);
 });
