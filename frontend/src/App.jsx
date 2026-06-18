@@ -31,6 +31,7 @@ function loadSession() {
 function saveSession(session) {
   if (!session) {
     localStorage.removeItem(SESSION_KEY);
+    pendo.clearSession();
     return;
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -89,6 +90,19 @@ function App() {
           saveSession(updated);
           return updated;
         });
+        pendo.identify({
+          visitor: {
+            id: data.user.id,
+            email: data.user.email || '',
+            full_name: data.user.full_name || '',
+            onboarding_completed: data.user.onboarding_completed || false,
+            created_at: data.user.created_at || '',
+            preferred_dashboard_role: data.user.preferred_dashboard_role || '',
+            companion_name: data.user.companion_name || '',
+            companion_avatar_id: data.user.companion_avatar_id || '',
+            companion_voice_name: data.user.companion_voice_name || '',
+          }
+        });
       })
       .catch((error) => {
         const status = Number(error?.status || 0);
@@ -124,6 +138,19 @@ function App() {
       };
       setSession(nextSession);
       saveSession(nextSession);
+      pendo.identify({
+        visitor: {
+          id: data.user.id,
+          email: data.user.email || '',
+          full_name: data.user.full_name || '',
+          onboarding_completed: data.user.onboarding_completed || false,
+          created_at: data.user.created_at || '',
+          preferred_dashboard_role: data.user.preferred_dashboard_role || '',
+          companion_name: data.user.companion_name || '',
+          companion_avatar_id: data.user.companion_avatar_id || '',
+          companion_voice_name: data.user.companion_voice_name || '',
+        }
+      });
       navigate(getPostLoginRoute(data.user));
     } catch (error) {
       setAuthError(error.message);
@@ -153,6 +180,19 @@ function App() {
       };
       setSession(nextSession);
       saveSession(nextSession);
+      pendo.identify({
+        visitor: {
+          id: data.user.id,
+          email: data.user.email || '',
+          full_name: data.user.full_name || '',
+          onboarding_completed: data.user.onboarding_completed || false,
+          created_at: data.user.created_at || '',
+          preferred_dashboard_role: data.user.preferred_dashboard_role || '',
+          companion_name: data.user.companion_name || '',
+          companion_avatar_id: data.user.companion_avatar_id || '',
+          companion_voice_name: data.user.companion_voice_name || '',
+        }
+      });
       return data.user;
     } catch (error) {
       setAuthError(error.message);
