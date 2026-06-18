@@ -4,9 +4,47 @@ const { config } = require('../config');
 
 const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 const sessions = new Map();
+const COMPANION_MODEL = process.env.GEMINI_COMPANION_MODEL || 'gemini-2.5-flash';
+const COMPANION_MODEL_ROTATION = (process.env.GEMINI_COMPANION_MODEL_ROTATION
+  || `${COMPANION_MODEL},gemini-2.5-flash-lite`)
+  .split(',')
+  .map((model) => model.trim())
+  .filter(Boolean);
+
+function uniqueStrings(values, limit = 8) {
+  return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))].slice(0, limit);
+}
 
 function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorStatus(error) {
+  return Number(error?.status || error?.error?.code || 0);
+}
+
+function isRetryableGeminiError(error) {
+  const status = getErrorStatus(error);
+  if ([429, 500, 502, 503, 504].includes(status)) return true;
+
+  const message = String(error?.message || '').toLowerCase();
+  if (status === 404 && message.includes('not found')) return true;
+
+  return message.includes('resource_exhausted')
+    || message.includes('quota')
+    || message.includes('high demand')
+    || message.includes('unavailable')
+    || message.includes('try again later')
+    || message.includes('temporar')
+    || message.includes('timeout');
+}
+
+function getCompanionModelCandidates() {
+  return uniqueStrings(COMPANION_MODEL_ROTATION, 8);
 }
 
 function getResponseText(response) {
@@ -59,13 +97,33 @@ async function runCompanionTurn({
     },
   ];
 
-  const response = await ai.models.generateContent({
-    model: config.geminiModel,
-    contents,
-    config: {
-      systemInstruction: buildInstruction({ companionName, companionInstructions }),
-    },
-  });
+  const modelCandidates = getCompanionModelCandidates();
+  let response;
+  let model = modelCandidates[0] || COMPANION_MODEL;
+
+  for (let attempt = 0; attempt < modelCandidates.length; attempt += 1) {
+    model = modelCandidates[attempt] || COMPANION_MODEL;
+
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction: buildInstruction({ companionName, companionInstructions }),
+        },
+      });
+      break;
+    } catch (error) {
+      const canRetry = isRetryableGeminiError(error) && attempt < modelCandidates.length - 1;
+      if (!canRetry) throw error;
+
+      const delayMs = (500 * (attempt + 1)) + Math.floor(Math.random() * 200);
+      console.warn(
+        `[GENAI] companion_retry userId=${userId} model=${model} attempt=${attempt + 1}/${modelCandidates.length} delayMs=${delayMs} status=${getErrorStatus(error) || 'n/a'}`,
+      );
+      await wait(delayMs);
+    }
+  }
 
   const responseText = getResponseText(response).trim();
   if (!responseText) {
@@ -93,6 +151,7 @@ async function runCompanionTurn({
     sessionId: session.id,
     responseText,
     agentName: `companion-${slugify(companionName || userId.slice(0, 8))}`.slice(0, 40),
+    model,
   };
 }
 
@@ -111,8 +170,15 @@ async function createGoogleAdkCompanion({ userId, companionName, companionInstru
     agentId: kickoff.agentName,
     sessionId: kickoff.sessionId,
     welcomeMessage: kickoff.responseText,
-    model: config.geminiModel,
+    model: kickoff.model,
   };
 }
 
-module.exports = { createGoogleAdkCompanion, runCompanionTurn };
+module.exports = {
+  createGoogleAdkCompanion,
+  runCompanionTurn,
+  _private: {
+    getCompanionModelCandidates,
+    isRetryableGeminiError,
+  },
+};
