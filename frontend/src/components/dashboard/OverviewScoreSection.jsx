@@ -5,7 +5,7 @@ import { StreakCard } from './StreakCard';
 
 export function OverviewScoreSection({ week, current, daySeries, activity }) {
   const bloomScore = computeBloomScore(week?.averages || current?.signalScores, activity, daySeries);
-  const streak = computeStreak(daySeries);
+  const streak = computeStreak(daySeries, activity);
 
   return (
     <section className="overview-score-row">

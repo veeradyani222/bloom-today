@@ -122,7 +122,7 @@ export function BondingSection({ momData, quickTips }) {
 export function MilestonesSection({ insights, daySeries }) {
   return (
     <>
-      <BadgeShelf totalCalls={insights?.activity?.totalCalls || 0} streak={computeStreak(daySeries)} />
+      <BadgeShelf totalCalls={insights?.activity?.totalCalls || 0} streak={computeStreak(daySeries, insights?.activity)} />
       <MilestoneTracker totalCalls={insights?.activity?.totalCalls || 0} />
     </>
   );

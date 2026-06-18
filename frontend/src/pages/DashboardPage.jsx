@@ -49,6 +49,7 @@ import nameCompanionIllustration from '../assets/namecompanion.svg';
 import firstCallIllustration from '../assets/first call.jpg';
 import streakIllustration from '../assets/streak.jpg';
 import { CenteredDashboardLoader } from '../components/dashboard/OverviewStates';
+import { computeActivityAwareStreak, getActivityCallCount } from '../lib/dashboardActivity';
 import { useDashboardData } from './useDashboardData';
 import './DashboardPage.css';
 
@@ -284,9 +285,9 @@ function formatDateTime(value) {
 export function computeBloomScore(scores, activity = {}, daySeries) {
   const supportConnection = Number(scores?.supportConnection) || 0;
   const selfKindness = Number(scores?.selfKindness) || 0;
-  const weekCalls = Number(activity?.weekCalls) || 0;
-  const monthCalls = Number(activity?.monthCalls) || 0;
-  const streak = computeStreak(daySeries);
+  const weekCalls = getActivityCallCount(activity, 'week');
+  const monthCalls = getActivityCallCount(activity, 'month');
+  const streak = computeStreak(daySeries, activity);
 
   const showingUpScore = Math.min(100, Math.round(
     (Math.min(weekCalls, 5) / 5) * 65
@@ -299,10 +300,10 @@ export function computeBloomScore(scores, activity = {}, daySeries) {
 }
 
 export function computeBloomScoreReason(scores, activity = {}, daySeries) {
-  const weekCalls = Number(activity?.weekCalls) || 0;
+  const weekCalls = getActivityCallCount(activity, 'week');
   const supportConnection = Math.round(Number(scores?.supportConnection) || 0);
   const selfKindness = Math.round(Number(scores?.selfKindness) || 0);
-  const streak = computeStreak(daySeries);
+  const streak = computeStreak(daySeries, activity);
 
   const showingUpSummary = weekCalls > 0
     ? `You've shown up for ${weekCalls} check-in${weekCalls === 1 ? '' : 's'} this week${streak > 0 ? ` and built a ${streak}-day streak` : ''}.`
@@ -319,14 +320,8 @@ export function computeBloomScoreReason(scores, activity = {}, daySeries) {
   return `${showingUpSummary} ${supportSummary} ${selfKindnessSummary} It does not drop just because stress is high.`;
 }
 
-export function computeStreak(daySeries) {
-  const points = daySeries?.month?.points || [];
-  let streak = 0;
-  for (let index = points.length - 1; index >= 0; index -= 1) {
-    if (points[index].callCount > 0) streak += 1;
-    else break;
-  }
-  return streak;
+export function computeStreak(daySeries, activity = {}) {
+  return computeActivityAwareStreak(daySeries, activity);
 }
 
 export function todayKey() {
@@ -1493,7 +1488,7 @@ function MomOverview({ data, firstName, daySeries, insights, momTips }) {
   const current = data?.current;
   const bloomScore = computeBloomScore(week?.averages || current?.signalScores, insights?.activity, daySeries);
   const bloomReason = computeBloomScoreReason(week?.averages || current?.signalScores, insights?.activity, daySeries);
-  const streak = computeStreak(daySeries);
+  const streak = computeStreak(daySeries, insights?.activity);
 
   if (!current) {
     return (
