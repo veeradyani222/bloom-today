@@ -1,0 +1,7 @@
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS companion_avatar_id TEXT,
+ADD COLUMN IF NOT EXISTS companion_voice_name TEXT;
+
+ALTER TABLE companions
+ADD COLUMN IF NOT EXISTS avatar_id TEXT,
+ADD COLUMN IF NOT EXISTS voice_name TEXT;
