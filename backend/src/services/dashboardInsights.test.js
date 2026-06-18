@@ -30,3 +30,16 @@ test('dashboard activity counts completed calls even when analysis is missing', 
     lastCallAt: oneHourAgo,
   });
 });
+
+test('dashboard Gemini model candidates default to supported generateContent models', () => {
+  const candidates = _private.getAnalysisModelCandidates();
+
+  assert.deepEqual(candidates, ['gemini-2.5-pro', 'gemini-2.5-flash']);
+});
+
+test('Gemini model-not-found errors are retryable so fallback candidates can run', () => {
+  const error = new Error('models/gemini-3-pro is not found for API version v1beta');
+  error.status = 404;
+
+  assert.equal(_private.isRetryableGeminiError(error), true);
+});

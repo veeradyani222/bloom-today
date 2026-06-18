@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 const ANALYSIS_MODEL = process.env.GEMINI_ANALYSIS_MODEL || config.geminiModel;
 const ANALYSIS_FALLBACK_MODEL = process.env.GEMINI_ANALYSIS_FALLBACK_MODEL || '';
 const ANALYSIS_MODEL_ROTATION = (process.env.GEMINI_ANALYSIS_MODEL_ROTATION
-  || 'gemini-3-pro,gemini-2.5-flash,gemini-2.5-pro')
+  || 'gemini-2.5-pro,gemini-2.5-flash')
   .split(',')
   .map((model) => model.trim())
   .filter(Boolean);
@@ -748,6 +748,8 @@ function isRetryableGeminiError(error) {
   if ([429, 500, 502, 503, 504].includes(status)) return true;
 
   const message = String(error?.message || '').toLowerCase();
+  if (status === 404 && message.includes('not found')) return true;
+
   return message.includes('high demand')
     || message.includes('unavailable')
     || message.includes('try again later')
@@ -1546,5 +1548,7 @@ module.exports = {
   recordCallMemory,
   _private: {
     buildActivitySummary,
+    getAnalysisModelCandidates,
+    isRetryableGeminiError,
   },
 };
