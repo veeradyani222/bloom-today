@@ -462,7 +462,7 @@ export function Navbar({ companionName = 'your companion', role = 'mom' }) {
             <button type="button" className="dash-logo" onClick={() => navigate('/dashboard')}>
               <span className="dash-logo-bloom">Bloom</span>
               {role === 'mom' ? (
-                <span className="dash-logo-sub">for {companionName}</span>
+                <span className="dash-logo-sub">with {companionName}</span>
               ) : null}
             </button>
             {role === 'therapist' || role === 'trusted' ? (
