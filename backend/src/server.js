@@ -7,6 +7,7 @@ const { config } = require('./config');
 const { pool } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
 const { generateShareKey } = require('./utils/codes');
+const { getOnboardingErrorResponse } = require('./onboardingErrors');
 const { createGoogleAdkCompanion, runCompanionTurn } = require('./services/googleAdk');
 const {
   analyzeCallSession,
@@ -1068,11 +1069,8 @@ app.put('/api/me/onboarding', async (req, res) => {
     console.error(`[ONBOARDING] error userId=${userId}`, error);
     await pool.query('ROLLBACK');
 
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid onboarding payload.' });
-    }
-
-    return res.status(400).json({ error: error.message || 'Failed to complete onboarding.' });
+    const response = getOnboardingErrorResponse(error);
+    return res.status(response.status).json({ error: response.error });
   }
 });
 

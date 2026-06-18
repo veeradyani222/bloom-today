@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { apiRequest } from '../lib/api';
 import { onboardingSteps, AVATAR_IDS } from '../constants/index';
+import { shouldAutoRegisterOnboarding } from './onboardingRegistration';
 import './OnboardingPage.css';
 
 /* ── Step-named SVG imports ── */
@@ -69,6 +70,7 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [hasAttemptedRegister, setHasAttemptedRegister] = useState(false);
   const [copied, setCopied] = useState(false);
   const [bodyKey, setBodyKey] = useState(0);
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -118,18 +120,21 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
 
   function setValue(key, value) {
     setError('');
+    setHasAttemptedRegister(false);
     setForm((prev) => ({ ...prev, [key]: value }));
     setTouched((prev) => ({ ...prev, [key]: true }));
   }
 
   function selectAvatar(avatarId) {
     setError('');
+    setHasAttemptedRegister(false);
     setForm((prev) => ({ ...prev, companionAvatarId: avatarId }));
     setTouched((prev) => ({ ...prev, companionAvatarId: true }));
   }
 
   function selectVoice(voiceName, { preview = true } = {}) {
     setError('');
+    setHasAttemptedRegister(false);
     setForm((prev) => ({ ...prev, companionVoiceName: voiceName }));
     setTouched((prev) => ({ ...prev, companionVoiceName: true }));
     if (preview) {
@@ -170,6 +175,7 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
 
   const doRegister = useCallback(async () => {
     if (registered || saving) return;
+    setHasAttemptedRegister(true);
     setSaving(true);
     setError('');
     try {
@@ -207,8 +213,17 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
   }, [form, token, session, setSession, saveSession, registered, saving]);
 
   useEffect(() => {
-    if (step.type === 'register' && !registered && !saving) doRegister();
-  }, [step, registered, saving, doRegister]);
+    if (
+      shouldAutoRegisterOnboarding({
+        stepType: step.type,
+        registered,
+        saving,
+        hasAttemptedRegister,
+      })
+    ) {
+      doRegister();
+    }
+  }, [step.type, registered, saving, hasAttemptedRegister, doRegister]);
 
   /* ── Guard: already onboarded → go to dashboard (must be after all hooks) ── */
   if (session?.user?.onboarding_completed) {
@@ -219,6 +234,10 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
     setError('');
     setCopied(false);
     if (!isStepValid(step)) { setError('Please complete this step to continue.'); return; }
+    if (step.type === 'register' && error && !saving) {
+      doRegister();
+      return;
+    }
     if (step.type === 'register' && !registered) return;
     if (step.type === 'done') { navigate('/dashboard'); return; }
     if (step.type === 'transition') {
@@ -239,6 +258,9 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
   function goBack() {
     setCopied(false);
     setError('');
+    if (step.type === 'register') {
+      setHasAttemptedRegister(false);
+    }
     if (registered && stepIndex > onboardingSteps.findIndex((s) => s.id === 'register')) return;
     const prev = getPrevStepIndex(stepIndex);
     setStepIndex(prev);
@@ -538,6 +560,7 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
 
   function getButtonLabel() {
     if (step.type === 'done') return 'Go to your dashboard →';
+    if (step.type === 'register' && error && !registered) return 'Try again';
     if (step.type === 'register' && !registered) return 'Please wait…';
     if (step.type === 'register' && registered) return 'Continue';
     if (step.type === 'transition') return transitioning ? "Let's go..." : "Let's do this!";
@@ -606,7 +629,7 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
             type="button"
             className={`onb-continue ${step.type === 'done' ? 'green' : ''}`}
             onClick={goNext}
-            disabled={step.type === 'register' && !registered}
+            disabled={step.type === 'register' && saving}
           >
             {getButtonLabel()}
           </button>
