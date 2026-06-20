@@ -126,6 +126,7 @@ export function useVideoCall({
   const currentAITextRef = useRef('');
   const turnCountRef = useRef(0);
   const savedMsgCountRef = useRef(0);
+  const pendoConversationIdRef = useRef(null); // Pendo trackAgent conversationId
 
   /* ── Callback ref for AI transcript (used by gesture mapper) ── */
   const onAITranscriptRef = useRef(null);
@@ -539,6 +540,26 @@ export function useVideoCall({
       }
       turnCountRef.current += 1;
 
+      // ── Pendo trackAgent ──
+      if (userText && window.pendo?.trackAgent) {
+        window.pendo.trackAgent("prompt", {
+          agentId: "R0DpVOfIBXdGTYcs63LCrZcPzDo",
+          conversationId: pendoConversationIdRef.current,
+          messageId: crypto.randomUUID(),
+          content: userText,
+          modelUsed: liveModel,
+        });
+      }
+      if (aiText && window.pendo?.trackAgent) {
+        window.pendo.trackAgent("agent_response", {
+          agentId: "R0DpVOfIBXdGTYcs63LCrZcPzDo",
+          conversationId: pendoConversationIdRef.current,
+          messageId: crypto.randomUUID(),
+          content: aiText,
+          modelUsed: liveModel,
+        });
+      }
+
       // Save new messages to DB every turn
       if (callIdRef.current && token) {
         const newMessages = transcriptRef.current.slice(savedMsgCountRef.current);
@@ -632,6 +653,7 @@ export function useVideoCall({
     turnCountRef.current = 0;
     savedMsgCountRef.current = 0;
     callStartPromiseRef.current = null;
+    pendoConversationIdRef.current = crypto.randomUUID();
 
     if (token) {
       callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'video' } })

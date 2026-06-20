@@ -115,6 +115,7 @@ export function useCompanionCall({
   const currentAITextRef = useRef('');      // Accumulates AI speech this turn
   const turnCountRef = useRef(0);           // How many full turns completed
   const savedMsgCountRef = useRef(0);       // How many transcript msgs already sent to DB
+  const pendoConversationIdRef = useRef(null); // Pendo trackAgent conversationId
 
   /* ── Callback ref for AI transcript (used by gesture mapper) ── */
   const onAITranscriptRef = useRef(null);
@@ -378,6 +379,7 @@ export function useCompanionCall({
     turnCountRef.current = 0;
     savedMsgCountRef.current = 0;
     callStartPromiseRef.current = null;
+    pendoConversationIdRef.current = crypto.randomUUID();
 
     if (token) {
       callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'voice' } })
@@ -565,6 +567,26 @@ export function useCompanionCall({
         currentAITextRef.current = '';
       }
       turnCountRef.current += 1;
+
+      // ── Pendo trackAgent ──
+      if (userText && window.pendo?.trackAgent) {
+        window.pendo.trackAgent("prompt", {
+          agentId: "u7I2WDP2Vm4eY7HmsXIH6-caNwc",
+          conversationId: pendoConversationIdRef.current,
+          messageId: crypto.randomUUID(),
+          content: userText,
+          modelUsed: liveModel,
+        });
+      }
+      if (aiText && window.pendo?.trackAgent) {
+        window.pendo.trackAgent("agent_response", {
+          agentId: "u7I2WDP2Vm4eY7HmsXIH6-caNwc",
+          conversationId: pendoConversationIdRef.current,
+          messageId: crypto.randomUUID(),
+          content: aiText,
+          modelUsed: liveModel,
+        });
+      }
 
       // Save new messages to DB every turn
       if (callIdRef.current && token) {
