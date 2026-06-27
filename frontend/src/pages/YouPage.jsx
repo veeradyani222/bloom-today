@@ -36,6 +36,10 @@ function SupportKeyCard({ title, description, keyValue, onRotate, rotating }) {
     if (!keyValue) return;
     try {
       await navigator.clipboard.writeText(keyValue);
+      pendo.track('support_key_copied', {
+        key_type: title.toLowerCase().includes('therapist') ? 'therapist' : 'trusted',
+        source_page: 'you',
+      });
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -145,6 +149,9 @@ export function YouPage({ token, session, setSession, saveSession }) {
         trustedKey: type === 'trusted' ? data.key : keys.trustedKey,
       };
       setKeys(nextKeys);
+      pendo.track('support_key_rotated', {
+        key_type: type,
+      });
 
       const updatedSession = {
         ...session,
@@ -195,6 +202,10 @@ export function YouPage({ token, session, setSession, saveSession }) {
       };
       setSession(updatedSession);
       saveSession(updatedSession);
+      pendo.track('profile_name_updated', {
+        user_role: role,
+        name_length: supportNameInput.trim().length,
+      });
       setSupportNameStatus('Name updated.');
     } catch (error) {
       setSupportNameStatus(error.message || 'Could not save your name.');
@@ -334,6 +345,12 @@ export function CompanionSetupPage({ token, session, setSession, saveSession }) 
       const updated = { ...session, user: data.user };
       setSession(updated);
       saveSession(updated);
+      pendo.track('companion_settings_updated', {
+        companion_name: form.name.trim(),
+        companion_avatar_id: form.avatarId,
+        companion_voice_name: form.voiceName,
+        has_instructions: Boolean(form.instructions.trim()),
+      });
       setSaved(true);
     } catch (saveError) {
       setError(saveError.message || 'Could not update your companion.');

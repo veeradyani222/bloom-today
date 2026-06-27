@@ -75,6 +75,10 @@ export function MyClientsPage({ token, session, setSession, saveSession }) {
       
       setSession(updatedSession);
       saveSession(updatedSession);
+      pendo.track('client_switched', {
+        support_role: role,
+        target_client_id: String(targetUserId),
+      });
       navigate('/dashboard');
     } catch (err) {
       alert(err.message || 'Could not switch client.');
@@ -98,6 +102,9 @@ export function MyClientsPage({ token, session, setSession, saveSession }) {
       // Reload clients
       const data = await apiRequest('/api/me/clients', { token });
       setClients(data.clients || []);
+      pendo.track('client_added', {
+        support_role: role,
+      });
       setShowAddModal(false);
       setNewKey('');
     } catch (err) {

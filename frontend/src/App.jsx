@@ -151,6 +151,11 @@ function App() {
           companion_voice_name: data.user.companion_voice_name || '',
         }
       });
+      pendo.track('user_signed_in', {
+        auth_role: data.user.auth_role || 'mom',
+        is_new_user: !data.user.onboarding_completed,
+        has_onboarding_completed: Boolean(data.user.onboarding_completed),
+      });
       navigate(getPostLoginRoute(data.user));
     } catch (error) {
       setAuthError(error.message);

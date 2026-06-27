@@ -76,6 +76,10 @@ export function OverviewPage({ token, session }) {
           onClose={() => setShowMoodPopup(false)}
           onSelect={(mood) => {
             localStorage.setItem(`bloom_mood_${todayKey()}`, mood);
+            pendo.track('mood_check_in_submitted', {
+              mood_value: mood,
+              date: todayKey(),
+            });
             setShowMoodPopup(false);
           }}
         />

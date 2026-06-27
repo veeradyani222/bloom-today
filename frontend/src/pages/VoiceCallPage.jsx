@@ -115,6 +115,7 @@ export function VoiceCallPage({ token, session }) {
     isConnecting,
     isConnected,
     hasApiKey,
+    callDuration,
     formattedDuration,
     turnState,
     startCall,
@@ -172,6 +173,11 @@ export function VoiceCallPage({ token, session }) {
   }
 
   async function handleSwitchToVideo() {
+    pendo.track('call_type_switched', {
+      call_duration_before_switch: callDuration,
+      from_call_type: 'voice',
+      to_call_type: 'video',
+    });
     await endCall();
     clearDashboardCache();
     navigate('/video-call', { replace: true, state: { autostartVideo: true } });
