@@ -76,7 +76,7 @@ Every user connects through a unique 8-character key generated with nanoid. Bloo
 | Backend | Express.js v5, Node.js 20 |
 | AI Agent | Google Agent Development Kit with `LlmAgent` and `InMemoryRunner` |
 | Analysis Engine | Gemini 2.5 Pro with structured JSON output |
-| Database | PostgreSQL on Neon |
+| Database | PostgreSQL on AWS Aurora |
 | Auth | Google OAuth 2.0 and JWT |
 | Deployment | Vercel frontend/backend projects |
 
