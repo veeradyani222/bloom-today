@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, ChevronLeft, Video, ArrowLeft } from 'lucide-react';
 import { useCompanionCall } from '../hooks/useCompanionCall';
 import { clearDashboardCache } from './useDashboardData';
+import { endCallAndNavigateImmediately } from './callNavigation';
 import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
@@ -165,16 +166,23 @@ export function VoiceCallPage({ token, session }) {
     prevCallState.current = callState;
   }, [callState, navigate]);
 
-  async function handleEndCall() {
-    await endCall();
-    clearDashboardCache();
-    navigate('/dashboard', { replace: true });
+  function handleEndCall() {
+    endCallAndNavigateImmediately({
+      endCall,
+      clearDashboardCache,
+      navigate,
+      to: '/dashboard',
+    });
   }
 
-  async function handleSwitchToVideo() {
-    await endCall();
-    clearDashboardCache();
-    navigate('/video-call', { replace: true, state: { autostartVideo: true } });
+  function handleSwitchToVideo() {
+    endCallAndNavigateImmediately({
+      endCall,
+      clearDashboardCache,
+      navigate,
+      to: '/video-call',
+      options: { replace: true, state: { autostartVideo: true } },
+    });
   }
 
   function handleRetry() {
@@ -188,10 +196,13 @@ export function VoiceCallPage({ token, session }) {
     startCall();
   }
 
-  async function handleGoBack() {
-    await endCall();
-    clearDashboardCache();
-    navigate('/dashboard', { replace: true });
+  function handleGoBack() {
+    endCallAndNavigateImmediately({
+      endCall,
+      clearDashboardCache,
+      navigate,
+      to: '/dashboard',
+    });
   }
 
   // Determine status text
