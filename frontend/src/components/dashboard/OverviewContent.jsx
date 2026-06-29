@@ -7,7 +7,7 @@ import { OverviewHeroSection } from './OverviewHeroSection';
 import { OverviewMoodSection } from './OverviewMoodSection';
 import { OverviewResourcesSection } from './OverviewResourcesSection';
 import { OverviewScoreSection } from './OverviewScoreSection';
-import { OverviewEmptyState } from './OverviewStates';
+import { OverviewEmptyState, OverviewLoading } from './OverviewStates';
 import { getMomOverviewState } from './overviewStateLogic';
 
 function MomOverviewContent({
@@ -28,6 +28,10 @@ function MomOverviewContent({
 
   if (overviewState === 'empty') {
     return <OverviewEmptyState illustration={welcomeIllustration} />;
+  }
+
+  if (overviewState === 'loading') {
+    return <OverviewLoading />;
   }
 
   return (
