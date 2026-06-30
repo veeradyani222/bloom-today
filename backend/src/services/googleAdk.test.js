@@ -19,3 +19,18 @@ test('Gemini quota errors are retryable for companion model fallback', () => {
   assert.equal(_private.isRetryableGeminiError(error), true);
 });
 
+test('createGoogleAdkCompanion provisions a session without calling Gemini', async () => {
+  const { createGoogleAdkCompanion } = require('./googleAdk');
+
+  const result = await createGoogleAdkCompanion({
+    userId: 'user-123',
+    companionName: 'Luna',
+    companionInstructions: 'Be gentle',
+  });
+
+  assert.equal(result.provider, 'google-genai');
+  assert.match(result.agentId, /^companion-luna$/);
+  assert.match(result.sessionId, /^[0-9a-f-]{36}$/);
+  assert.equal(result.welcomeMessage, null);
+});
+

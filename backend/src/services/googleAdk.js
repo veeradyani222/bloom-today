@@ -157,20 +157,16 @@ async function runCompanionTurn({
 
 async function createGoogleAdkCompanion({ userId, companionName, companionInstructions }) {
   console.log(`[GENAI] companion_create_start userId=${userId} companion=${companionName}`);
-  const kickoff = await runCompanionTurn({
-    userId,
-    companionName,
-    companionInstructions,
-    sessionId: undefined,
-    message: 'Introduce yourself in 2-3 lines and ask a gentle first check-in question.',
-  });
+
+  const session = getSession({ userId, sessionId: undefined });
+  const agentName = `companion-${slugify(companionName || userId.slice(0, 8))}`.slice(0, 40);
 
   return {
     provider: 'google-genai',
-    agentId: kickoff.agentName,
-    sessionId: kickoff.sessionId,
-    welcomeMessage: kickoff.responseText,
-    model: kickoff.model,
+    agentId: agentName,
+    sessionId: session.id,
+    welcomeMessage: null,
+    model: COMPANION_MODEL,
   };
 }
 
