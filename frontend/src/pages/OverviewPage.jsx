@@ -54,7 +54,7 @@ export function OverviewPage({ token, session }) {
     ? (session?.user?.companion_name || session?.user?.companionName || 'Sage')
     : firstName;
   const [showMoodPopup, setShowMoodPopup] = useState(false);
-  const { insights, daySeries, momTips, quickTips, loading, error } = useDashboardData(token, roleFromSession);
+  const { insights, daySeries, momTips, quickTips, loading, error, reflectionTimedOut } = useDashboardData(token, roleFromSession);
   const role = insights?.role || roleFromSession;
   const therapistMessage = session?.user?.latest_therapist_message;
   const trustedMessage = session?.user?.latest_trusted_message;
@@ -114,6 +114,7 @@ export function OverviewPage({ token, session }) {
             welcomeIllustration={welcomeIllustration}
             thankYouIllustration={thankYouIllustration}
             jumpBackIllustration={connectTrustedPersonIllustration}
+            reflectionTimedOut={reflectionTimedOut}
           />
         ) : null}
       </main>

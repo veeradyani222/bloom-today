@@ -7,7 +7,7 @@ import { OverviewHeroSection } from './OverviewHeroSection';
 import { OverviewMoodSection } from './OverviewMoodSection';
 import { OverviewResourcesSection } from './OverviewResourcesSection';
 import { OverviewScoreSection } from './OverviewScoreSection';
-import { OverviewEmptyState, OverviewLoading } from './OverviewStates';
+import { OverviewEmptyState, OverviewLoading, OverviewProcessingState } from './OverviewStates';
 import { getMomOverviewState } from './overviewStateLogic';
 
 function MomOverviewContent({
@@ -21,10 +21,11 @@ function MomOverviewContent({
   welcomeIllustration,
   thankYouIllustration,
   jumpBackIllustration,
+  reflectionTimedOut = false,
 }) {
   const week = data?.week;
   const current = data?.current;
-  const overviewState = getMomOverviewState(data, insights);
+  const overviewState = getMomOverviewState(data, insights, { reflectionTimedOut });
 
   if (overviewState === 'empty') {
     return <OverviewEmptyState illustration={welcomeIllustration} />;
@@ -32,6 +33,10 @@ function MomOverviewContent({
 
   if (overviewState === 'loading') {
     return <OverviewLoading />;
+  }
+
+  if (overviewState === 'processing') {
+    return <OverviewProcessingState illustration={thankYouIllustration} />;
   }
 
   return (
@@ -65,6 +70,7 @@ export function OverviewContent({
   welcomeIllustration,
   thankYouIllustration,
   jumpBackIllustration,
+  reflectionTimedOut = false,
 }) {
   if (role === 'therapist') return <TherapistDashboard data={insights?.therapist} token={token} daySeries={daySeries} firstName={firstName} activity={insights?.activity} />;
   if (role === 'trusted') return <TrustedDashboard data={insights?.trusted} token={token} daySeries={daySeries} firstName={firstName} activity={insights?.activity} />;
@@ -81,6 +87,7 @@ export function OverviewContent({
       welcomeIllustration={welcomeIllustration}
       thankYouIllustration={thankYouIllustration}
       jumpBackIllustration={jumpBackIllustration}
+      reflectionTimedOut={reflectionTimedOut}
     />
   );
 }

@@ -1,8 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { isReflectionPending } from '../components/dashboard/overviewStateLogic';
+import {
+  clearPendingReflection,
+  hasPendingReflectionMarker,
+} from './dashboardReflectionSession';
+
+function shouldPollForReflection(insights, role) {
+  if (role !== 'mom' || !insights) return false;
+  if (insights?.mom?.current) return false;
+
+  if (isReflectionPending(insights?.mom, insights)) {
+    return true;
+  }
+
+  return hasPendingReflectionMarker();
+}
 
 const dashboardCache = new Map();
 const DASHBOARD_CACHE_VERSION = 'v2-resources-embed-check';
+const REFLECTION_POLL_INTERVAL_MS = 2500;
+const REFLECTION_POLL_MAX_ATTEMPTS = 30;
 
 export function clearDashboardCache() {
   dashboardCache.clear();
@@ -10,6 +28,26 @@ export function clearDashboardCache() {
 
 function buildCacheKey(token, role) {
   return `${DASHBOARD_CACHE_VERSION}::${token || 'anon'}::${role || 'mom'}`;
+}
+
+async function fetchDashboardCore(token, role) {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  const [nextInsights, nextDaySeries] = await Promise.all([
+    apiRequest(`/api/dashboard/insights?timeZone=${encodeURIComponent(tz)}`, { token }),
+    apiRequest(`/api/dashboard/day-points?timeZone=${encodeURIComponent(tz)}`, { token }),
+  ]);
+
+  return {
+    tz,
+    nextInsights,
+    nextDaySeries,
+    nextCore: {
+      insights: nextInsights,
+      daySeries: nextDaySeries,
+      momTips: [],
+      quickTips: { summary: '', tips: [] },
+    },
+  };
 }
 
 export function useDashboardData(token, role = 'mom') {
@@ -22,9 +60,25 @@ export function useDashboardData(token, role = 'mom') {
   const [quickTips, setQuickTips] = useState(cached?.quickTips || { summary: '', tips: [] });
   const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState('');
+  const [reflectionTimedOut, setReflectionTimedOut] = useState(false);
+  const pollAttemptsRef = useRef(0);
+
+  const applyCorePayload = useCallback((nextInsights, nextDaySeries, nextCore) => {
+    dashboardCache.set(cacheKey, nextCore);
+    setInsights(nextInsights);
+    setDaySeries(nextDaySeries);
+
+    if (nextInsights?.mom?.current) {
+      clearPendingReflection();
+      setReflectionTimedOut(false);
+      pollAttemptsRef.current = 0;
+    }
+  }, [cacheKey]);
 
   useEffect(() => {
     let cancelled = false;
+    pollAttemptsRef.current = 0;
+    setReflectionTimedOut(false);
 
     async function load() {
       const hasCachedData = Boolean(dashboardCache.get(cacheKey));
@@ -34,35 +88,13 @@ export function useDashboardData(token, role = 'mom') {
       setError('');
 
       try {
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
-
-        // Core dashboard payload first; this should unblock rendering quickly.
-        const [nextInsights, nextDaySeries] = await Promise.all([
-          apiRequest(`/api/dashboard/insights?timeZone=${encodeURIComponent(tz)}`, { token }),
-          apiRequest(`/api/dashboard/day-points?timeZone=${encodeURIComponent(tz)}`, { token }),
-        ]);
-
-        if (role === 'mom') {
-          const resourceCount = nextInsights?.mom?.resources?.resources?.length || 0;
-
-        }
-
-        const nextCore = {
-          insights: nextInsights,
-          daySeries: nextDaySeries,
-          momTips: [],
-          quickTips: { summary: '', tips: [] },
-        };
-
-        dashboardCache.set(cacheKey, nextCore);
+        const { tz, nextInsights, nextDaySeries, nextCore } = await fetchDashboardCore(token, role);
 
         if (cancelled) return;
 
-        setInsights(nextInsights);
-        setDaySeries(nextDaySeries);
+        applyCorePayload(nextInsights, nextDaySeries, nextCore);
         setLoading(false);
 
-        // Mom-only enrichments should not block first paint.
         if (role !== 'mom') {
           setMomTips([]);
           setQuickTips({ summary: '', tips: [] });
@@ -101,7 +133,56 @@ export function useDashboardData(token, role = 'mom') {
     return () => {
       cancelled = true;
     };
-  }, [token, role, cacheKey]);
+  }, [token, role, cacheKey, applyCorePayload]);
+
+  useEffect(() => {
+    if (loading || error || !shouldPollForReflection(insights, role)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timeoutId = 0;
+
+    async function pollForReflection() {
+      if (cancelled) return;
+
+      pollAttemptsRef.current += 1;
+      if (pollAttemptsRef.current > REFLECTION_POLL_MAX_ATTEMPTS) {
+        clearPendingReflection();
+        setReflectionTimedOut(true);
+        return;
+      }
+
+      try {
+        const { nextInsights, nextDaySeries, nextCore } = await fetchDashboardCore(token, role);
+        if (cancelled) return;
+
+        applyCorePayload(nextInsights, nextDaySeries, nextCore);
+
+        if (nextInsights?.mom?.current) {
+          return;
+        }
+
+        if (!shouldPollForReflection(nextInsights, role)) {
+          clearPendingReflection();
+          return;
+        }
+      } catch {
+        // Keep polling; the initial dashboard load already surfaced hard failures.
+      }
+
+      if (!cancelled) {
+        timeoutId = window.setTimeout(pollForReflection, REFLECTION_POLL_INTERVAL_MS);
+      }
+    }
+
+    timeoutId = window.setTimeout(pollForReflection, REFLECTION_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [loading, error, insights, role, token, applyCorePayload]);
 
   return {
     insights,
@@ -110,5 +191,6 @@ export function useDashboardData(token, role = 'mom') {
     quickTips,
     loading,
     error,
+    reflectionTimedOut,
   };
 }

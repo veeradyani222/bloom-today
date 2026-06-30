@@ -34,3 +34,5 @@ Thumbs.db
 
 # Local dev
 *.local
+.vercel
+.env*

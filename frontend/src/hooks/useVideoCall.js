@@ -408,17 +408,27 @@ export function useVideoCall({
     if (userText) finalMessages.push({ role: 'user', content: userText });
     if (aiText) finalMessages.push({ role: 'assistant', content: aiText });
     const unsaved = finalMessages.slice(savedMsgCountRef.current);
+    const pendingCallId = callIdRef.current;
+    const pendingCallStart = callStartPromiseRef.current;
+
+    callIdRef.current = null;
+    callStartPromiseRef.current = null;
+    savedMsgCountRef.current = 0;
+    transcriptRef.current = [];
+    currentUserTextRef.current = '';
+    currentAITextRef.current = '';
+    turnCountRef.current = 0;
 
     const finalizePromise = token
       ? (async () => {
           try {
-            if (!callIdRef.current && callStartPromiseRef.current) {
-              await callStartPromiseRef.current;
+            let finalCallId = pendingCallId;
+            if (!finalCallId && pendingCallStart) {
+              finalCallId = await pendingCallStart;
             }
 
-            if (!callIdRef.current) return;
+            if (!finalCallId) return;
 
-            const finalCallId = callIdRef.current;
             try {
               if (unsaved.length > 0) {
                 await apiRequest(`/api/calls/${finalCallId}/messages`, {
@@ -436,19 +446,9 @@ export function useVideoCall({
             }
           } catch {
             // Dashboard can still recover on the next completed call.
-          } finally {
-            callIdRef.current = null;
-            callStartPromiseRef.current = null;
           }
         })()
       : Promise.resolve();
-    callIdRef.current = null;
-    callStartPromiseRef.current = null;
-    savedMsgCountRef.current = 0;
-    transcriptRef.current = [];
-    currentUserTextRef.current = '';
-    currentAITextRef.current = '';
-    turnCountRef.current = 0;
     return finalizePromise;
   }, [stopRecorder, stopTimer, stopWebcam, token]);
 

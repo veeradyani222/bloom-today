@@ -44,6 +44,16 @@ export function OverviewLoading() {
   return <CenteredDashboardLoader />;
 }
 
+export function OverviewProcessingState({ illustration }) {
+  return (
+    <section className="dash-empty-state">
+      <img src={illustration} alt="" className="dash-empty-illustration" />
+      <h2>Your reflection is still settling in</h2>
+      <p>We saved your call, but the dashboard needs another moment. Try refreshing in a bit, or start another check-in when you are ready.</p>
+    </section>
+  );
+}
+
 export function OverviewError({ error }) {
   return (
     <section className="dash-empty-state">

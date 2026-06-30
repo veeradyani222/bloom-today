@@ -31,6 +31,16 @@ describe('getMomOverviewState', () => {
 
     assert.equal(state, 'empty');
   });
+
+  it('falls back when reflection polling times out', () => {
+    const state = getMomOverviewState(
+      { current: null },
+      { activity: { totalCalls: 1, callsToday: 1, callsThisWeek: 1 } },
+      { reflectionTimedOut: true },
+    );
+
+    assert.equal(state, 'processing');
+  });
 });
 
 describe('DASHBOARD_LOADING_STEPS', () => {
