@@ -625,6 +625,11 @@ export function OnboardingPage({ token, session, setSession, saveSession }) {
 
         {/* Footer CTA */}
         <div className="onb-footer">
+          {step.id === 'companionInstructions' && (
+            <p className="onb-email-consent">
+              By continuing, you agree to receive reminder emails from us.
+            </p>
+          )}
           <button
             type="button"
             className={`onb-continue ${step.type === 'done' ? 'green' : ''}`}
