@@ -18,6 +18,8 @@ import { CompanionSetupPage, YouPage } from './pages/YouPage';
 import { MyClientsPage } from './pages/MyClientsPage';
 import { VoiceCallPage } from './pages/VoiceCallPage';
 import { VideoCallPage } from './pages/VideoCallPage';
+import { SafariBrowserNotice } from './components/SafariBrowserNotice';
+import { isLikelySafariBrowser } from './lib/mediaPermissions';
 
 function loadSession() {
   try {
@@ -200,6 +202,10 @@ function App() {
     } finally {
       setAuthLoading(false);
     }
+  }
+
+  if (isLikelySafariBrowser()) {
+    return <SafariBrowserNotice />;
   }
 
   return (

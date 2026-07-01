@@ -1,8 +1,18 @@
-function isIOSDevice() {
+export function isIOSDevice() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
   return /iP(hone|ad|od)/i.test(ua)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function getChromeDeepLinkUrl(url = typeof window !== 'undefined' ? window.location.href : '') {
+  if (url.startsWith('https://')) {
+    return url.replace(/^https:/, 'googlechromes:');
+  }
+  if (url.startsWith('http://')) {
+    return url.replace(/^http:/, 'googlechrome:');
+  }
+  return url;
 }
 
 export function isLikelySafariBrowser() {
