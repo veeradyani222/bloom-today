@@ -1,4 +1,5 @@
 import { registeredWorklets } from './audioworklet-registry';
+import { callDebug } from './call-debug.js';
 
 export class AudioStreamer {
   constructor(context) {
@@ -17,10 +18,22 @@ export class AudioStreamer {
 
     // Track active sources for clean interrupt
     this._activeSources = new Set();
+    this._receivedChunks = 0;
+    this._scheduledBuffers = 0;
+    callDebug('audio-streamer', 'created', {
+      contextState: this.context.state,
+      contextSampleRate: this.context.sampleRate,
+      outputSampleRate: this.sampleRate,
+      bufferSize: this.bufferSize,
+    });
 
     // Handle tab visibility — resume AudioContext when user returns
     this._onVisibilityChange = () => {
       if (document.visibilityState === 'visible' && this.context.state === 'suspended') {
+        callDebug('audio-streamer', 'visibility-resume-start', {
+          visibilityState: document.visibilityState,
+          contextState: this.context.state,
+        });
         this.context.resume().catch(() => {});
       }
     };
@@ -43,9 +56,22 @@ export class AudioStreamer {
   }
 
   addPCM16(chunk) {
+    this._receivedChunks += 1;
+    if (this._receivedChunks <= 5 || this._receivedChunks % 20 === 0) {
+      callDebug('audio-streamer', 'add-pcm16', {
+        receivedChunks: this._receivedChunks,
+        bytes: chunk.byteLength,
+        contextState: this.context.state,
+        queueLength: this.audioQueue.length,
+        isPlaying: this.isPlaying,
+      });
+    }
     // Auto-resume suspended AudioContext (critical for background tab recovery)
     if (this.context.state === 'suspended') {
-      this.context.resume().catch(() => {});
+      callDebug('audio-streamer', 'auto-resume-start');
+      this.context.resume()
+        .then(() => callDebug('audio-streamer', 'auto-resume-ok', { state: this.context.state }))
+        .catch((error) => callDebug('audio-streamer', 'auto-resume-failed', { error }));
     }
 
     this.isStreamComplete = false;
@@ -63,6 +89,12 @@ export class AudioStreamer {
     if (!this.isPlaying) {
       this.isPlaying = true;
       this.scheduledTime = this.context.currentTime + this.initialBufferTime;
+      callDebug('audio-streamer', 'playback-start', {
+        contextState: this.context.state,
+        queueLength: this.audioQueue.length,
+        scheduledTime: this.scheduledTime,
+        currentTime: this.context.currentTime,
+      });
       // Reset gain to 1 — critical after stop() which ramps gain to 0
       try {
         this.gainNode.gain.cancelScheduledValues(this.context.currentTime);
@@ -86,6 +118,16 @@ export class AudioStreamer {
       const source = this.context.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.gainNode);
+      this._scheduledBuffers += 1;
+      if (this._scheduledBuffers <= 5 || this._scheduledBuffers % 20 === 0) {
+        callDebug('audio-streamer', 'schedule-buffer', {
+          scheduledBuffers: this._scheduledBuffers,
+          duration: audioBuffer.duration,
+          queueLength: this.audioQueue.length,
+          activeSources: this._activeSources.size,
+          contextState: this.context.state,
+        });
+      }
 
       this._activeSources.add(source);
       source.onended = () => {
@@ -135,15 +177,33 @@ export class AudioStreamer {
   }
 
   async resume() {
+    callDebug('audio-streamer', 'resume-requested', {
+      contextState: this.context.state,
+      queueLength: this.audioQueue.length,
+      isPlaying: this.isPlaying,
+    });
     if (this.context.state === 'suspended') {
       await this.context.resume();
     }
     this.isStreamComplete = false;
     this.scheduledTime = this.context.currentTime + this.initialBufferTime;
     this.gainNode.gain.setValueAtTime(1, this.context.currentTime);
+    callDebug('audio-streamer', 'resume-ok', {
+      contextState: this.context.state,
+      scheduledTime: this.scheduledTime,
+      currentTime: this.context.currentTime,
+    });
   }
 
   stop() {
+    callDebug('audio-streamer', 'stop', {
+      queueLength: this.audioQueue.length,
+      activeSources: this._activeSources.size,
+      isPlaying: this.isPlaying,
+      receivedChunks: this._receivedChunks,
+      scheduledBuffers: this._scheduledBuffers,
+      contextState: this.context.state,
+    });
     this.isPlaying = false;
     this.isStreamComplete = true;
     this.audioQueue = [];
@@ -176,6 +236,7 @@ export class AudioStreamer {
   }
 
   destroy() {
+    callDebug('audio-streamer', 'destroy');
     this.stop();
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
   }

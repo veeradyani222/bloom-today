@@ -1,25 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import EventEmitter from 'eventemitter3';
+import { callDebug } from './call-debug.js';
 import { base64ToArrayBuffer } from './utils';
 
-/* ── Verbose Logger ── */
-const LOG_PREFIX = '%c[LiveClient]';
-const STYLES = {
-  info:    'color: #60a5fa; font-weight: bold',  // blue
-  success: 'color: #34d399; font-weight: bold',  // green
-  warn:    'color: #fbbf24; font-weight: bold',  // yellow
-  error:   'color: #f87171; font-weight: bold',  // red
-  event:   'color: #c084fc; font-weight: bold',  // purple
-  audio:   'color: #6b7280; font-weight: normal', // gray (high frequency)
-};
-
-function log() {}
-
-function logWarn() {}
-
-function logError() {}
-
-/* ── Audio helpers ── */
 function emitAudioParts(parts, emitAudio) {
   if (!Array.isArray(parts)) return [];
 
@@ -36,16 +19,23 @@ function emitAudioParts(parts, emitAudio) {
   return nonAudioParts;
 }
 
-/* ── Timing helper ── */
 let sessionStartTime = 0;
 function elapsed() {
   if (!sessionStartTime) return '0.0s';
-  return ((Date.now() - sessionStartTime) / 1000).toFixed(1) + 's';
+  return `${((Date.now() - sessionStartTime) / 1000).toFixed(1)}s`;
+}
+
+function log(level, event, details = {}) {
+  callDebug('live-client', event, { level, ...details });
 }
 
 export class GenAILiveClient extends EventEmitter {
   constructor(options) {
     super();
+    callDebug('live-client', 'constructor', {
+      hasApiKey: Boolean(options?.apiKey),
+      apiKeyLength: options?.apiKey?.length || 0,
+    });
     this.client = new GoogleGenAI(options);
     this.session = null;
     this.status = 'disconnected';
@@ -55,13 +45,11 @@ export class GenAILiveClient extends EventEmitter {
     this._autoReconnecting = false;
     this._intentionalClose = false;
     this._audioChunkCount = 0;
-
-    log('info', 'Client created');
   }
 
   async connect(model, config) {
     if (this.status === 'connecting' || this.status === 'connected') {
-      logWarn('Connect called while already', this.status);
+      log('warn', 'connect-skipped-already-active', { status: this.status });
       return false;
     }
 
@@ -71,25 +59,25 @@ export class GenAILiveClient extends EventEmitter {
     this._audioChunkCount = 0;
     sessionStartTime = Date.now();
 
-    log('info', `Connecting to model: ${model}`);
-    log('info', 'Config:', JSON.stringify({
+    log('info', 'connect-start', {
+      model,
       responseModalities: config.responseModalities,
       voiceName: config.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName,
       startSensitivity: config.realtimeInputConfig?.automaticActivityDetection?.startOfSpeechSensitivity,
       endSensitivity: config.realtimeInputConfig?.automaticActivityDetection?.endOfSpeechSensitivity,
       silenceDurationMs: config.realtimeInputConfig?.automaticActivityDetection?.silenceDurationMs,
-    }, null, 2));
+      prefixPaddingMs: config.realtimeInputConfig?.automaticActivityDetection?.prefixPaddingMs,
+      activityHandling: config.realtimeInputConfig?.activityHandling,
+      systemInstructionChars: config.systemInstruction?.parts?.[0]?.text?.length || 0,
+      hasResumptionHandle: Boolean(this._resumptionHandle),
+    });
 
     try {
       const fullConfig = {
         ...config,
-        // Disable thinking to minimize response latency for voice
         thinkingConfig: {
           thinkingBudget: 0,
         },
-        // Aggressive compression to prevent latency growth in long calls.
-        // Audio accrues ~25 tokens/sec. Trigger at 8k (~2.5 min of audio),
-        // compress down to 3k to keep response times consistently fast.
         contextWindowCompression: {
           slidingWindow: { targetTokens: 6000 },
           triggerTokens: 15000,
@@ -97,14 +85,9 @@ export class GenAILiveClient extends EventEmitter {
         sessionResumption: {
           handle: this._resumptionHandle || undefined,
         },
-        // Enable speech-to-text transcription for analytics & context summarization
         inputAudioTranscription: {},
         outputAudioTranscription: {},
       };
-
-      if (this._resumptionHandle) {
-        log('info', 'Resuming session with handle:', this._resumptionHandle.slice(0, 20) + '...');
-      }
 
       this.session = await this.client.live.connect({
         model,
@@ -112,16 +95,22 @@ export class GenAILiveClient extends EventEmitter {
         callbacks: {
           onopen: () => {
             this.status = 'connected';
-            log('success', `✅ WebSocket OPEN (${elapsed()})`);
+            log('success', 'websocket-open', { elapsed: elapsed() });
             this.emit('open');
           },
           onclose: (event) => {
-            log('warn', `❌ WebSocket CLOSED (${elapsed()})`, event?.reason || '');
+            log('warn', 'websocket-closed', {
+              elapsed: elapsed(),
+              reason: event?.reason || '',
+              code: event?.code,
+              wasClean: event?.wasClean,
+              hasResumptionHandle: Boolean(this._resumptionHandle),
+              intentionalClose: this._intentionalClose,
+            });
             this.status = 'disconnected';
             this.session = null;
 
             if (this._resumptionHandle && !this._intentionalClose) {
-              log('info', '♻️ Has resumption handle — will auto-reconnect');
               this._autoReconnect();
               return;
             }
@@ -129,21 +118,37 @@ export class GenAILiveClient extends EventEmitter {
             this.emit('close', event);
           },
           onerror: (event) => {
-            logError(`⚠️ WebSocket ERROR (${elapsed()})`, event?.message || event);
+            log('error', 'websocket-error', {
+              elapsed: elapsed(),
+              message: event?.message || String(event),
+            });
             this.emit('error', event);
           },
           onmessage: (message) => {
+            callDebug('live-client', 'message-received', {
+              hasSetupComplete: Boolean(message?.setupComplete),
+              hasGoAway: Boolean(message?.goAway),
+              hasUsage: Boolean(message?.usageMetadata),
+              hasServerContent: Boolean(message?.serverContent),
+              hasModelTurn: Boolean(message?.serverContent?.modelTurn),
+              partCount: message?.serverContent?.modelTurn?.parts?.length || 0,
+              interrupted: Boolean(message?.serverContent?.interrupted),
+              generationComplete: Boolean(message?.serverContent?.generationComplete),
+              turnComplete: Boolean(message?.serverContent?.turnComplete),
+              inputTranscriptChars: message?.serverContent?.inputTranscription?.text?.length || 0,
+              outputTranscriptChars: message?.serverContent?.outputTranscription?.text?.length || 0,
+            });
             this.handleMessage(message);
           },
         },
       });
 
       this._intentionalClose = false;
-      log('success', `Connection initiated (${elapsed()})`);
+      log('success', 'connect-returned', { elapsed: elapsed(), status: this.status });
       return true;
     } catch (error) {
       this.status = 'disconnected';
-      logError(`Connection FAILED (${elapsed()})`, error?.message || error);
+      log('error', 'connect-failed', { elapsed: elapsed(), error });
       throw error;
     }
   }
@@ -153,24 +158,28 @@ export class GenAILiveClient extends EventEmitter {
     this._autoReconnecting = true;
 
     try {
-      log('info', '♻️ Auto-reconnecting in 500ms...');
+      log('info', 'auto-reconnect-start');
       this.emit('reconnecting');
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       this.status = 'disconnected';
       await this.connect(this.model, this.config);
       this._autoReconnecting = false;
-      log('success', '♻️ Auto-reconnect SUCCESS');
+      log('success', 'auto-reconnect-ok');
       this.emit('reconnected');
-    } catch (err) {
+    } catch (error) {
       this._autoReconnecting = false;
-      logError('♻️ Auto-reconnect FAILED', err?.message);
-      this.emit('close', { reason: 'Reconnection failed: ' + (err?.message || 'Unknown error') });
+      log('error', 'auto-reconnect-failed', { error });
+      this.emit('close', { reason: `Reconnection failed: ${error?.message || 'Unknown error'}` });
     }
   }
 
   disconnect() {
-    log('info', `Disconnect called (intentional) (${elapsed()})`);
+    log('info', 'disconnect-called', {
+      elapsed: elapsed(),
+      hasSession: Boolean(this.session),
+      status: this.status,
+    });
     this._intentionalClose = true;
     this._resumptionHandle = null;
     if (!this.session) {
@@ -179,94 +188,121 @@ export class GenAILiveClient extends EventEmitter {
     }
     try {
       this.session.close();
-    } catch (_) {}
+    } catch (error) {
+      log('warn', 'disconnect-close-failed', { error });
+    }
     this.session = null;
     this.status = 'disconnected';
   }
 
   handleMessage(message) {
-    // Session resumption
     if (message?.sessionResumptionUpdate) {
       const update = message.sessionResumptionUpdate;
       if (update.resumable && update.newHandle) {
         this._resumptionHandle = update.newHandle;
-        log('info', `📌 Session resumption handle updated (resumable: ${update.resumable})`);
+        log('info', 'session-resumption-update', {
+          resumable: update.resumable,
+          hasHandle: Boolean(update.newHandle),
+        });
       }
     }
 
-    // GoAway
     if (message?.goAway) {
-      logWarn(`⏰ GoAway received (${elapsed()}) — timeLeft:`, message.goAway.timeLeft);
+      log('warn', 'go-away', { elapsed: elapsed(), timeLeft: message.goAway.timeLeft });
       this.emit('goaway', message.goAway);
     }
 
     if (message?.setupComplete) {
-      log('success', `🎯 Setup complete (${elapsed()})`);
+      log('success', 'setup-complete', { elapsed: elapsed() });
       this.emit('setupcomplete');
       return;
     }
 
-    // Usage metadata
     if (message?.usageMetadata) {
-      const m = message.usageMetadata;
-      log('info', `📊 Tokens — prompt: ${m.promptTokenCount || 0}, response: ${m.responseTokenCount || 0}, total: ${m.totalTokenCount || 0}`);
+      const metadata = message.usageMetadata;
+      log('info', 'usage-metadata', {
+        promptTokenCount: metadata.promptTokenCount || 0,
+        responseTokenCount: metadata.responseTokenCount || 0,
+        totalTokenCount: metadata.totalTokenCount || 0,
+      });
     }
 
     const serverContent = message?.serverContent;
     if (!serverContent) return;
 
-    // Interrupted
     if (serverContent.interrupted) {
-      log('event', `🛑 INTERRUPTED by server (${elapsed()}) — audio chunks received before interrupt: ${this._audioChunkCount}`);
+      log('event', 'server-interrupted', {
+        elapsed: elapsed(),
+        audioChunkCount: this._audioChunkCount,
+      });
       this._audioChunkCount = 0;
       this.emit('interrupted');
     }
 
-    // Generation complete
     if (serverContent.generationComplete) {
-      log('event', `📝 Generation complete (${elapsed()})`);
+      log('event', 'generation-complete', { elapsed: elapsed() });
       this.emit('generationcomplete');
     }
 
-    // Transcription must be processed before turnComplete so transcript buffers
-    // are populated when listeners flush on turn end.
     if (serverContent.inputTranscription?.text) {
+      log('event', 'input-transcript', { chars: serverContent.inputTranscription.text.length });
       this.emit('inputtranscript', serverContent.inputTranscription.text);
     }
     if (serverContent.outputTranscription?.text) {
+      log('event', 'output-transcript', { chars: serverContent.outputTranscription.text.length });
       this.emit('outputtranscript', serverContent.outputTranscription.text);
     }
 
-    // Turn complete
     if (serverContent.turnComplete) {
-      log('event', `✅ Turn complete (${elapsed()}) — total audio chunks this turn: ${this._audioChunkCount}`);
+      log('event', 'turn-complete', {
+        elapsed: elapsed(),
+        audioChunkCount: this._audioChunkCount,
+      });
       this._audioChunkCount = 0;
       this.emit('turncomplete');
     }
 
-    // Audio and content (skip if interrupted)
     if (!serverContent.interrupted) {
       const modelTurnParts = serverContent.modelTurn?.parts || [];
       const nonAudioParts = emitAudioParts(modelTurnParts, (audioData) => {
-        this._audioChunkCount++;
-        // Log every 10th chunk to avoid console spam
-        if (this._audioChunkCount % 10 === 1) {
-          log('audio', `🔊 Audio chunk #${this._audioChunkCount} (${(audioData.byteLength / 1024).toFixed(1)}KB) (${elapsed()})`);
+        this._audioChunkCount += 1;
+        if (this._audioChunkCount <= 5 || this._audioChunkCount % 10 === 1) {
+          log('audio', 'audio-chunk', {
+            audioChunkCount: this._audioChunkCount,
+            kb: Number((audioData.byteLength / 1024).toFixed(1)),
+            elapsed: elapsed(),
+          });
         }
         this.emit('audio', audioData);
       });
 
       if (nonAudioParts.length > 0) {
-        log('event', `📄 Non-audio content received (${elapsed()})`, nonAudioParts);
+        log('event', 'non-audio-content', {
+          elapsed: elapsed(),
+          partCount: nonAudioParts.length,
+          partKeys: nonAudioParts.map((part) => Object.keys(part || {})),
+        });
         this.emit('content', { modelTurn: { parts: nonAudioParts } });
       }
     }
   }
 
   sendRealtimeInput(chunks) {
-    if (!this.session || this.status !== 'connected') return;
+    if (!this.session || this.status !== 'connected') {
+      callDebug('live-client', 'send-realtime-input-skipped', {
+        hasSession: Boolean(this.session),
+        status: this.status,
+        chunkCount: chunks?.length || 0,
+      });
+      return;
+    }
     try {
       chunks.forEach((chunk) => {
+        callDebug('live-client', 'send-realtime-input', {
+          mimeType: chunk.mimeType,
+          payloadChars: chunk.data?.length || 0,
+          status: this.status,
+        });
         this.session.sendRealtimeInput({
           audio: {
             data: chunk.data,
@@ -275,19 +311,26 @@ export class GenAILiveClient extends EventEmitter {
         });
       });
     } catch (error) {
-      logError('sendRealtimeInput FAILED', error?.message);
+      log('error', 'send-realtime-input-failed', { error });
       this.emit('error', error);
     }
   }
 
-  /**
-   * Send a video frame (JPEG) alongside ongoing audio.
-   * @param {string} base64Data Base64-encoded JPEG image data
-   * @param {string} [mimeType='image/jpeg'] MIME type
-   */
   sendVideoFrame(base64Data, mimeType = 'image/jpeg') {
-    if (!this.session || this.status !== 'connected') return;
+    if (!this.session || this.status !== 'connected') {
+      callDebug('live-client', 'send-video-frame-skipped', {
+        hasSession: Boolean(this.session),
+        status: this.status,
+        payloadChars: base64Data?.length || 0,
+      });
+      return;
+    }
     try {
+      callDebug('live-client', 'send-video-frame', {
+        mimeType,
+        payloadChars: base64Data?.length || 0,
+        status: this.status,
+      });
       this.session.sendRealtimeInput({
         video: {
           data: base64Data,
@@ -295,18 +338,29 @@ export class GenAILiveClient extends EventEmitter {
         },
       });
     } catch (error) {
-      logError('sendVideoFrame FAILED', error?.message);
+      log('error', 'send-video-frame-failed', { error });
     }
   }
 
   send(parts, turnComplete = true) {
-    if (!this.session || this.status !== 'connected') return;
+    if (!this.session || this.status !== 'connected') {
+      callDebug('live-client', 'send-client-content-skipped', {
+        hasSession: Boolean(this.session),
+        status: this.status,
+        turnComplete,
+      });
+      return;
+    }
     const turns = Array.isArray(parts) ? parts : [parts];
-    log('info', `📤 sendClientContent (turnComplete: ${turnComplete})`, turns);
+    log('info', 'send-client-content', {
+      turnComplete,
+      turnCount: turns.length,
+      turnKeys: turns.map((turn) => Object.keys(turn || {})),
+    });
     try {
       this.session.sendClientContent({ turns, turnComplete });
     } catch (error) {
-      logError('sendClientContent FAILED', error?.message);
+      log('error', 'send-client-content-failed', { error });
       this.emit('error', error);
     }
   }

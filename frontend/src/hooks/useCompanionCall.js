@@ -9,6 +9,7 @@ import { AudioRecorder } from '../lib/live-api/audio-recorder';
 import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
 import { registerLiveClientListeners } from '../lib/live-api/client-listeners';
+import { callDebug, startCallDebugSession } from '../lib/live-api/call-debug.js';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
 import { requestMediaPermissions } from '../lib/mediaPermissions';
@@ -24,9 +25,15 @@ const S = {
   err: 'color: #f87171; font-weight: bold',
   event: 'color: #c084fc; font-weight: bold',
 };
-function vcLog() {}
-function vcWarn() {}
-function vcErr() {}
+function vcLog(level, message, details) {
+  callDebug('voice-call', String(message), { level, details });
+}
+function vcWarn(message, details) {
+  callDebug('voice-call', String(message), { level: 'warn', details });
+}
+function vcErr(message, details) {
+  callDebug('voice-call', String(message), { level: 'error', details });
+}
 
 /* ── Tuning constants ── */
 const SPEECH_END_TIMEOUT_MS = 500;  // gap before we consider AI done speaking per-chunk
@@ -228,7 +235,14 @@ export function useCompanionCall({
 
   const startRecorder = useCallback(async () => {
     const client = clientRef.current;
-    if (!client || !isConnected || muted) return;
+    if (!client || !isConnected || muted) {
+      callDebug('voice-call', 'start-recorder-skipped', {
+        hasClient: Boolean(client),
+        isConnected,
+        muted,
+      });
+      return;
+    }
 
     if (recorderRef.current) {
       try {
@@ -266,7 +280,9 @@ export function useCompanionCall({
 
     const preflightMicStream = micPreflightStreamRef.current;
     micPreflightStreamRef.current = null;
+    callDebug('voice-call', 'recorder-start-before', { hasPreflightStream: Boolean(preflightMicStream) });
     await recorder.start(preflightMicStream ? { stream: preflightMicStream } : undefined);
+    callDebug('voice-call', 'recorder-start-after');
   }, [isConnected, muted]);
 
   /* ── Cleanup ── */
@@ -371,12 +387,19 @@ export function useCompanionCall({
     }
 
     const onOpen = () => {
+      callDebug('voice-call', 'client-open');
       vcLog('ok', 'Call CONNECTED, starting timer');
       setCallState('connected');
       startTimer();
     };
 
     const onClose = (event) => {
+      callDebug('voice-call', 'client-close', {
+        reason: event?.reason || '',
+        code: event?.code,
+        wasClean: event?.wasClean,
+        intentional: intentionalHangupRef.current,
+      });
       vcWarn('WebSocket CLOSED', event?.reason || '');
       stopRecorder();
       setRemoteVolume(0);
@@ -391,7 +414,14 @@ export function useCompanionCall({
     };
 
     const onAudio = (audioData) => {
-      if (ignoreAudioRef.current) return;
+      if (ignoreAudioRef.current) {
+        callDebug('voice-call', 'remote-audio-ignored', { bytes: audioData.byteLength });
+        return;
+      }
+      callDebug('voice-call', 'remote-audio', {
+        bytes: audioData.byteLength,
+        streamerReady: Boolean(streamerRef.current),
+      });
 
       modelTurnActiveRef.current = true;
       isAssistantSpeakingRef.current = true;
@@ -415,6 +445,7 @@ export function useCompanionCall({
     };
 
     const onInterrupted = () => {
+      callDebug('voice-call', 'client-interrupted');
       performBargeIn('server-interrupted');
       currentAITextRef.current = '';
     };
@@ -422,6 +453,12 @@ export function useCompanionCall({
     const onTurnComplete = () => {
       const wasIgnoring = ignoreAudioRef.current;
       const wasTurnActive = modelTurnActiveRef.current;
+      callDebug('voice-call', 'turn-complete', {
+        wasIgnoring,
+        wasTurnActive,
+        currentUserTextChars: currentUserTextRef.current.length,
+        currentAITextChars: currentAITextRef.current.length,
+      });
 
       ignoreAudioRef.current = false;
       modelTurnActiveRef.current = false;
@@ -458,6 +495,9 @@ export function useCompanionCall({
     };
 
     const onError = (event) => {
+      callDebug('voice-call', 'client-error', {
+        message: event?.message || String(event),
+      });
       vcErr('ERROR event', event?.message || event);
       setCallState('error');
       setError(event?.message || 'Voice call encountered an error.');
@@ -466,10 +506,12 @@ export function useCompanionCall({
     };
 
     const onInputTranscript = (text) => {
+      callDebug('voice-call', 'input-transcript', { chars: text?.length || 0 });
       if (text) currentUserTextRef.current += text + ' ';
     };
 
     const onOutputTranscript = (text) => {
+      callDebug('voice-call', 'output-transcript', { chars: text?.length || 0 });
       if (text) {
         currentAITextRef.current += text + ' ';
         if (onAITranscriptRef.current) onAITranscriptRef.current(text);
@@ -509,12 +551,21 @@ export function useCompanionCall({
   /* ── Start call ── */
   const startCall = useCallback(async () => {
     if (!hasApiKey) {
+      callDebug('voice-call', 'start-blocked-missing-api-key');
       setCallState('error');
       setError('Missing `VITE_GEMINI_API_KEY` in frontend .env');
       return;
     }
-    if (isConnecting || isConnected) return;
+    if (isConnecting || isConnected) {
+      callDebug('voice-call', 'start-skipped-active', { isConnecting, isConnected });
+      return;
+    }
 
+    startCallDebugSession('voice-call', {
+      liveModel,
+      companionVoiceName,
+      hasToken: Boolean(token),
+    });
     vcLog('ok', '📞 Starting call...');
     setError('');
     setCallState('connecting');
@@ -533,16 +584,26 @@ export function useCompanionCall({
     callStartPromiseRef.current = null;
 
     if (token) {
+      callDebug('voice-call', 'db-call-start-before');
       callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'voice' } })
         .then((data) => {
+          callDebug('voice-call', 'db-call-start-after', { callId: data.callId });
           callIdRef.current = data.callId;
           return data.callId;
         })
-        .catch(() => null);
+        .catch((error) => {
+          callDebug('voice-call', 'db-call-start-failed', { error });
+          return null;
+        });
     }
 
     try {
+      callDebug('voice-call', 'permission-before');
       const permissionStream = await requestMediaPermissions({ audio: true });
+      callDebug('voice-call', 'permission-after', {
+        audioTracks: permissionStream.getAudioTracks().length,
+        videoTracks: permissionStream.getVideoTracks().length,
+      });
       const [primaryAudioTrack, ...extraAudioTracks] = permissionStream.getAudioTracks();
       if (!primaryAudioTrack) {
         throw new Error('Microphone permission was granted, but no microphone track is available.');
@@ -550,15 +611,30 @@ export function useCompanionCall({
       extraAudioTracks.forEach((track) => track.stop());
       permissionStream.getVideoTracks().forEach((track) => track.stop());
       micPreflightStreamRef.current = new MediaStream([primaryAudioTrack]);
+      callDebug('voice-call', 'mic-preflight-ready', {
+        id: primaryAudioTrack.id,
+        readyState: primaryAudioTrack.readyState,
+        enabled: primaryAudioTrack.enabled,
+        muted: primaryAudioTrack.muted,
+        settings: typeof primaryAudioTrack.getSettings === 'function' ? primaryAudioTrack.getSettings() : {},
+      });
 
       if (!streamerRef.current) {
+        callDebug('voice-call', 'audio-output-before');
         const audioCtx = await audioContext({ id: 'companion-audio-out' });
         streamerRef.current = new AudioStreamer(audioCtx);
+        callDebug('voice-call', 'audio-output-after', {
+          state: audioCtx.state,
+          sampleRate: audioCtx.sampleRate,
+        });
       }
+      callDebug('voice-call', 'streamer-resume-before');
       await streamerRef.current.resume();
+      callDebug('voice-call', 'streamer-resume-after');
 
       clientRef.current = new GenAILiveClient({ apiKey });
       registerClientListeners(clientRef.current);
+      callDebug('voice-call', 'client-ready');
 
       // Register greeting handler BEFORE connect, so setupcomplete is never missed
       clientRef.current.once('setupcomplete', () => {
@@ -598,12 +674,17 @@ export function useCompanionCall({
       };
 
       try {
+        callDebug('voice-call', 'connect-primary-before', { liveModel });
         await clientRef.current.connect(liveModel, baseConfig);
+        callDebug('voice-call', 'connect-primary-after', { liveModel });
       } catch (primaryError) {
         if (liveModel === DEFAULT_MODEL) throw primaryError;
+        callDebug('voice-call', 'connect-primary-failed', { liveModel, error: primaryError });
         await clientRef.current.connect(DEFAULT_MODEL, baseConfig);
+        callDebug('voice-call', 'connect-fallback-after', { fallbackModel: DEFAULT_MODEL });
       }
     } catch (connectError) {
+      callDebug('voice-call', 'start-failed', { error: connectError });
       cleanupCall(false);
       setCallState('error');
       vcErr('📞 Call FAILED to start', connectError?.message || connectError);

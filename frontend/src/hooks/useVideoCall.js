@@ -8,6 +8,7 @@ import {
 import { AudioRecorder } from '../lib/live-api/audio-recorder';
 import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
+import { callDebug, startCallDebugSession } from '../lib/live-api/call-debug.js';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
 import { requestMediaPermissions } from '../lib/mediaPermissions';
@@ -23,9 +24,15 @@ const S = {
   err:   'color: #f87171; font-weight: bold',
   event: 'color: #c084fc; font-weight: bold',
 };
-function vcLog() {}
-function vcWarn() {}
-function vcErr() {}
+function vcLog(level, message, details) {
+  callDebug('video-call', String(message), { level, details });
+}
+function vcWarn(message, details) {
+  callDebug('video-call', String(message), { level: 'warn', details });
+}
+function vcErr(message, details) {
+  callDebug('video-call', String(message), { level: 'error', details });
+}
 
 /* ── Constants ── */
 const SPEECH_END_TIMEOUT_MS = 1200;
@@ -221,7 +228,14 @@ export function useVideoCall({
 
   const startRecorder = useCallback(async () => {
     const client = clientRef.current;
-    if (!client || !isConnected || muted) return;
+    if (!client || !isConnected || muted) {
+      callDebug('video-call', 'start-recorder-skipped', {
+        hasClient: Boolean(client),
+        isConnected,
+        muted,
+      });
+      return;
+    }
     if (recorderRef.current) {
       try { recorderRef.current.stop(); } catch { /* ignore */ }
     }
@@ -248,7 +262,9 @@ export function useVideoCall({
 
     const preflightMicStream = micPreflightStreamRef.current;
     micPreflightStreamRef.current = null;
+    callDebug('video-call', 'recorder-start-before', { hasPreflightStream: Boolean(preflightMicStream) });
     await recorder.start(preflightMicStream ? { stream: preflightMicStream } : undefined);
+    callDebug('video-call', 'recorder-start-after');
   }, [isConnected, muted]);
 
   /* ── Webcam management ── */
@@ -266,6 +282,7 @@ export function useVideoCall({
   const attachStreamToVideo = useCallback(async (stream, attempt = 0) => {
     const videoEl = videoElRef.current;
     if (!videoEl) {
+      callDebug('video-call', 'attach-video-waiting-for-element', { attempt });
       if (attempt < 10) {
         await new Promise((resolve) => setTimeout(resolve, 100));
         return attachStreamToVideo(stream, attempt + 1);
@@ -273,6 +290,11 @@ export function useVideoCall({
       return;
     }
 
+    callDebug('video-call', 'attach-video-before', {
+      attempt,
+      streamVideoTracks: stream?.getVideoTracks?.().length || 0,
+      readyState: videoEl.readyState,
+    });
     videoEl.srcObject = stream;
     videoEl.muted = true;
     videoEl.autoplay = true;
@@ -289,6 +311,17 @@ export function useVideoCall({
 
   const useExistingWebcamStream = useCallback(async (stream) => {
     const videoTracks = stream?.getVideoTracks() || [];
+    callDebug('video-call', 'use-existing-webcam-stream', {
+      videoTrackCount: videoTracks.length,
+      tracks: videoTracks.map((track) => ({
+        id: track.id,
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+        settings: typeof track.getSettings === 'function' ? track.getSettings() : {},
+      })),
+    });
     if (!videoTracks.length) {
       throw new Error('Camera permission was granted, but no camera track is available.');
     }
@@ -323,13 +356,18 @@ export function useVideoCall({
     let lastError = null;
     for (const constraints of cameraConstraints) {
       try {
+        callDebug('video-call', 'webcam-attempt-before', { constraints });
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         videoStreamRef.current = stream;
         await attachStreamToVideo(stream);
+        callDebug('video-call', 'webcam-attempt-after', {
+          videoTracks: stream.getVideoTracks().length,
+        });
         vcLog('ok', '📹 Webcam started');
         return;
       } catch (err) {
         lastError = err;
+        callDebug('video-call', 'webcam-attempt-failed', { constraints, error: err });
         vcWarn('📹 Webcam attempt failed:', err?.name || 'UnknownError', err?.message || err);
       }
     }
@@ -343,6 +381,8 @@ export function useVideoCall({
   /* ── Frame capture → send to Gemini ── */
   const startFrameCapture = useCallback(() => {
     if (frameCaptureIntervalRef.current) clearInterval(frameCaptureIntervalRef.current);
+    let skippedNotReadyCount = 0;
+    let skippedModelActiveCount = 0;
 
     // Create a hidden canvas for capturing
     if (!captureCanvasRef.current) {
@@ -355,8 +395,23 @@ export function useVideoCall({
       const client = clientRef.current;
       const video = videoElRef.current;
       const canvas = captureCanvasRef.current;
-      if (!client || !video || !canvas || video.readyState < 2) return;
-      if (!videoEnabled) return;
+      if (!client || !video || !canvas || video.readyState < 2) {
+        skippedNotReadyCount += 1;
+        if (skippedNotReadyCount <= 3 || skippedNotReadyCount % 10 === 0) {
+          callDebug('video-call', 'frame-capture-skipped-not-ready', {
+            count: skippedNotReadyCount,
+            hasClient: Boolean(client),
+            hasVideo: Boolean(video),
+            hasCanvas: Boolean(canvas),
+            readyState: video?.readyState,
+          });
+        }
+        return;
+      }
+      if (!videoEnabled) {
+        callDebug('video-call', 'frame-capture-skipped-video-disabled');
+        return;
+      }
       if (modelTurnActiveRef.current) return; // Skip frames while AI responds — saves ~60% of video tokens
 
       const ctx = canvas.getContext('2d');
@@ -364,6 +419,12 @@ export function useVideoCall({
       const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
       const base64 = dataUrl.split(',')[1];
       if (base64) {
+        callDebug('video-call', 'frame-capture-send', {
+          payloadChars: base64.length,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
         client.sendVideoFrame(base64, 'image/jpeg');
       }
     }, FRAME_CAPTURE_INTERVAL_MS);
@@ -466,6 +527,7 @@ export function useVideoCall({
 
     const onOpen = () => {
       vcLog('ok', 'ðŸ“¹ Video call CONNECTED');
+      callDebug('video-call', 'client-open');
       setCallState('connected');
       startTimer();
       startFrameCapture();
@@ -473,6 +535,12 @@ export function useVideoCall({
 
     const onClose = (event) => {
       vcWarn('ðŸ“¹ WebSocket CLOSED', event?.reason || '');
+      callDebug('video-call', 'client-close', {
+        reason: event?.reason || '',
+        code: event?.code,
+        wasClean: event?.wasClean,
+        intentional: intentionalHangupRef.current,
+      });
       stopRecorder();
       setRemoteVolume(0);
       stopTimer();
@@ -486,7 +554,15 @@ export function useVideoCall({
     };
 
     const onAudio = (audioData) => {
-      if (ignoreAudioRef.current) return;
+      if (ignoreAudioRef.current) {
+        callDebug('video-call', 'remote-audio-ignored', { bytes: audioData.byteLength });
+        return;
+      }
+      callDebug('video-call', 'remote-audio', {
+        bytes: audioData.byteLength,
+        streamerReady: Boolean(streamerRef.current),
+        lipSyncCallback: Boolean(onAudioChunkRef.current),
+      });
       modelTurnActiveRef.current = true;
       isAssistantSpeakingRef.current = true;
       setTurnState('ai-speaking');
@@ -517,11 +593,18 @@ export function useVideoCall({
     };
 
     const onInterrupted = () => {
+      callDebug('video-call', 'client-interrupted');
       performBargeIn('server-interrupted');
       currentAITextRef.current = ''; // Discard partial AI transcript
     };
 
     const onTurnComplete = () => {
+      callDebug('video-call', 'turn-complete', {
+        currentUserTextChars: currentUserTextRef.current.length,
+        currentAITextChars: currentAITextRef.current.length,
+        ignoreAudio: ignoreAudioRef.current,
+        modelTurnActive: modelTurnActiveRef.current,
+      });
       ignoreAudioRef.current = false;
       modelTurnActiveRef.current = false;
       isAssistantSpeakingRef.current = false;
@@ -557,10 +640,12 @@ export function useVideoCall({
     };
 
     const onInputTranscript = (text) => {
+      callDebug('video-call', 'input-transcript', { chars: text?.length || 0 });
       if (text) currentUserTextRef.current += text + ' ';
     };
 
     const onOutputTranscript = (text) => {
+      callDebug('video-call', 'output-transcript', { chars: text?.length || 0 });
       if (text) {
         currentAITextRef.current += text + ' ';
         // Forward to gesture mapper callback
@@ -615,13 +700,22 @@ export function useVideoCall({
   /* ── Start call ── */
   const startCall = useCallback(async () => {
     if (!hasApiKey) {
+      callDebug('video-call', 'start-blocked-missing-api-key');
       setCallState('error');
       setError('Missing `VITE_GEMINI_API_KEY` in frontend .env');
       return;
     }
-    if (isConnecting || isConnected) return;
+    if (isConnecting || isConnected) {
+      callDebug('video-call', 'start-skipped-active', { isConnecting, isConnected });
+      return;
+    }
 
     vcLog('ok', '📹 Starting video call...');
+    startCallDebugSession('video-call', {
+      liveModel,
+      companionVoiceName,
+      hasToken: Boolean(token),
+    });
     setError('');
     setCallState('connecting');
     intentionalHangupRef.current = false;
@@ -639,16 +733,26 @@ export function useVideoCall({
     callStartPromiseRef.current = null;
 
     if (token) {
+      callDebug('video-call', 'db-call-start-before');
       callStartPromiseRef.current = apiRequest('/api/calls/start', { method: 'POST', token, body: { callType: 'video' } })
         .then((data) => {
+          callDebug('video-call', 'db-call-start-after', { callId: data.callId });
           callIdRef.current = data.callId;
           return data.callId;
         })
-        .catch(() => null);
+        .catch((error) => {
+          callDebug('video-call', 'db-call-start-failed', { error });
+          return null;
+        });
     }
 
     try {
+      callDebug('video-call', 'permission-before');
       const permissionStream = await requestMediaPermissions({ audio: true, video: true });
+      callDebug('video-call', 'permission-after', {
+        audioTracks: permissionStream.getAudioTracks().length,
+        videoTracks: permissionStream.getVideoTracks().length,
+      });
       const [primaryVideoTrack, ...extraVideoTracks] = permissionStream.getVideoTracks();
       const [primaryAudioTrack, ...extraAudioTracks] = permissionStream.getAudioTracks();
 
@@ -665,11 +769,32 @@ export function useVideoCall({
       const cameraStream = new MediaStream([primaryVideoTrack]);
       await useExistingWebcamStream(cameraStream);
       micPreflightStreamRef.current = new MediaStream([primaryAudioTrack]);
+      callDebug('video-call', 'media-preflight-ready', {
+        audioTrack: {
+          id: primaryAudioTrack.id,
+          readyState: primaryAudioTrack.readyState,
+          enabled: primaryAudioTrack.enabled,
+          muted: primaryAudioTrack.muted,
+          settings: typeof primaryAudioTrack.getSettings === 'function' ? primaryAudioTrack.getSettings() : {},
+        },
+        videoTrack: {
+          id: primaryVideoTrack.id,
+          readyState: primaryVideoTrack.readyState,
+          enabled: primaryVideoTrack.enabled,
+          muted: primaryVideoTrack.muted,
+          settings: typeof primaryVideoTrack.getSettings === 'function' ? primaryVideoTrack.getSettings() : {},
+        },
+      });
 
       // Audio output setup
       if (!streamerRef.current) {
+        callDebug('video-call', 'audio-output-before');
         const audioCtx = await audioContext({ id: 'companion-audio-out' });
         streamerRef.current = new AudioStreamer(audioCtx);
+        callDebug('video-call', 'audio-output-after', {
+          state: audioCtx.state,
+          sampleRate: audioCtx.sampleRate,
+        });
 
         // Create an AnalyserNode for TalkingHead lip-sync
         const analyser = audioCtx.createAnalyser();
@@ -678,10 +803,13 @@ export function useVideoCall({
         streamerRef.current.gainNode.connect(analyser);
         setAnalyserNode(analyser);
       }
+      callDebug('video-call', 'streamer-resume-before');
       await streamerRef.current.resume();
+      callDebug('video-call', 'streamer-resume-after');
 
       clientRef.current = new GenAILiveClient({ apiKey });
       registerClientListeners(clientRef.current);
+      callDebug('video-call', 'client-ready');
 
       // Register greeting handler BEFORE connect
       clientRef.current.once('setupcomplete', () => {
@@ -719,12 +847,17 @@ export function useVideoCall({
       };
 
       try {
+        callDebug('video-call', 'connect-primary-before', { liveModel });
         await clientRef.current.connect(liveModel, baseConfig);
+        callDebug('video-call', 'connect-primary-after', { liveModel });
       } catch (primaryError) {
         if (liveModel === DEFAULT_MODEL) throw primaryError;
+        callDebug('video-call', 'connect-primary-failed', { liveModel, error: primaryError });
         await clientRef.current.connect(DEFAULT_MODEL, baseConfig);
+        callDebug('video-call', 'connect-fallback-after', { fallbackModel: DEFAULT_MODEL });
       }
     } catch (connectError) {
+      callDebug('video-call', 'start-failed', { error: connectError });
       cleanupCall(false);
       setCallState('error');
       vcErr('📹 Video call FAILED', connectError?.message || connectError);
