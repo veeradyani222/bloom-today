@@ -1,19 +1,22 @@
 const audioContextMap = new Map();
 
 export async function audioContext(options = {}) {
-  const didInteract = new Promise((resolve) => {
-    window.addEventListener('pointerdown', resolve, { once: true });
-    window.addEventListener('keydown', resolve, { once: true });
-  });
-
   async function createContext() {
     if (options.id && audioContextMap.has(options.id)) {
       return audioContextMap.get(options.id);
     }
 
-    const context = new AudioContext(options);
+    const AudioContextConstructor = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error('Web Audio is not supported in this browser.');
+    }
+
+    const context = new AudioContextConstructor(options);
     if (options.id) {
       audioContextMap.set(options.id, context);
+    }
+    if (context.state === 'suspended') {
+      await context.resume?.();
     }
     return context;
   }
@@ -23,11 +26,11 @@ export async function audioContext(options = {}) {
     unlockAudio.src =
       'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
     await unlockAudio.play();
-    return createContext();
   } catch {
-    await didInteract;
-    return createContext();
+    // Safari can reject play() after an already-consumed tap. Do not wait for
+    // another gesture here; the call startup path should continue immediately.
   }
+  return createContext();
 }
 
 export function base64ToArrayBuffer(base64) {

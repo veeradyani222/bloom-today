@@ -8,6 +8,7 @@ import {
 import { AudioRecorder } from '../lib/live-api/audio-recorder';
 import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
+import { registerLiveClientListeners } from '../lib/live-api/client-listeners';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
 import { requestMediaPermissions } from '../lib/mediaPermissions';
@@ -78,7 +79,6 @@ export function useCompanionCall({
   const [remoteVolume, setRemoteVolume] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
   const [turnState, setTurnState] = useState('idle');
-  const [clientVersion, setClientVersion] = useState(0);
 
   /* ── Refs ── */
   const clientRef = useRef(null);
@@ -93,6 +93,7 @@ export function useCompanionCall({
   const timerIntervalRef = useRef(null);
   const remoteVolumeDecayRef = useRef(null);
   const lastRemoteVolumeRef = useRef(0);
+  const detachClientListenersRef = useRef(null);
 
   // ── Model turn tracking ──
   // TRUE while the model is actively generating (from first audio chunk until turnComplete).
@@ -271,6 +272,10 @@ export function useCompanionCall({
   /* ── Cleanup ── */
   const cleanupCall = useCallback((intentional = false) => {
     intentionalHangupRef.current = intentional;
+    if (detachClientListenersRef.current) {
+      detachClientListenersRef.current();
+      detachClientListenersRef.current = null;
+    }
     if (assistantSpeechTimeoutRef.current) {
       clearTimeout(assistantSpeechTimeoutRef.current);
       assistantSpeechTimeoutRef.current = null;
@@ -353,6 +358,149 @@ export function useCompanionCall({
     return finalizePromise;
   }, [cleanupCall]);
 
+  const registerClientListeners = useCallback((client) => {
+    if (!client) return;
+    if (detachClientListenersRef.current) {
+      detachClientListenersRef.current();
+      detachClientListenersRef.current = null;
+    }
+
+    const onOpen = () => {
+      vcLog('ok', 'Call CONNECTED, starting timer');
+      setCallState('connected');
+      startTimer();
+    };
+
+    const onClose = (event) => {
+      vcWarn('WebSocket CLOSED', event?.reason || '');
+      stopRecorder();
+      setRemoteVolume(0);
+      stopTimer();
+      if (intentionalHangupRef.current) {
+        intentionalHangupRef.current = false;
+        setCallState('idle');
+        return;
+      }
+      setCallState('error');
+      setError(event?.reason || 'Call connection dropped. Please try again.');
+    };
+
+    const onAudio = (audioData) => {
+      if (ignoreAudioRef.current) return;
+
+      modelTurnActiveRef.current = true;
+      isAssistantSpeakingRef.current = true;
+      setTurnState('ai-speaking');
+
+      if (assistantSpeechTimeoutRef.current) {
+        clearTimeout(assistantSpeechTimeoutRef.current);
+      }
+      assistantSpeechTimeoutRef.current = window.setTimeout(() => {
+        isAssistantSpeakingRef.current = false;
+        setTurnState('idle');
+        decayRemoteVolume();
+      }, SPEECH_END_TIMEOUT_MS);
+
+      const chunk = new Uint8Array(audioData);
+      streamerRef.current?.addPCM16(chunk);
+
+      const vol = estimatePcmVolume(audioData);
+      lastRemoteVolumeRef.current = vol;
+      setRemoteVolume(vol);
+    };
+
+    const onInterrupted = () => {
+      performBargeIn('server-interrupted');
+      currentAITextRef.current = '';
+    };
+
+    const onTurnComplete = () => {
+      const wasIgnoring = ignoreAudioRef.current;
+      const wasTurnActive = modelTurnActiveRef.current;
+
+      ignoreAudioRef.current = false;
+      modelTurnActiveRef.current = false;
+
+      vcLog('event', `Turn complete - ignoreAudio was: ${wasIgnoring}, modelTurnActive was: ${wasTurnActive}, both now: false`);
+
+      isAssistantSpeakingRef.current = false;
+      decayRemoteVolume();
+      setTimeout(() => {
+        setTurnState((current) => (current === 'ai-speaking' ? 'idle' : current));
+      }, 200);
+
+      const userText = currentUserTextRef.current.trim();
+      const aiText = currentAITextRef.current.trim();
+      if (userText) {
+        transcriptRef.current.push({ role: 'user', content: userText });
+        currentUserTextRef.current = '';
+      }
+      if (aiText) {
+        transcriptRef.current.push({ role: 'assistant', content: aiText });
+        currentAITextRef.current = '';
+      }
+      turnCountRef.current += 1;
+
+      if (callIdRef.current && token) {
+        const newMessages = transcriptRef.current.slice(savedMsgCountRef.current);
+        if (newMessages.length > 0) {
+          savedMsgCountRef.current = transcriptRef.current.length;
+          apiRequest(`/api/calls/${callIdRef.current}/messages`, {
+            method: 'POST', token, body: { messages: newMessages },
+          }).catch(() => {});
+        }
+      }
+    };
+
+    const onError = (event) => {
+      vcErr('ERROR event', event?.message || event);
+      setCallState('error');
+      setError(event?.message || 'Voice call encountered an error.');
+      stopRecorder();
+      stopTimer();
+    };
+
+    const onInputTranscript = (text) => {
+      if (text) currentUserTextRef.current += text + ' ';
+    };
+
+    const onOutputTranscript = (text) => {
+      if (text) {
+        currentAITextRef.current += text + ' ';
+        if (onAITranscriptRef.current) onAITranscriptRef.current(text);
+      }
+    };
+
+    const detach = registerLiveClientListeners(client, {
+      open: onOpen,
+      close: onClose,
+      audio: onAudio,
+      interrupted: onInterrupted,
+      setupcomplete: () => vcLog('ok', 'Setup complete (registered listener)'),
+      turncomplete: onTurnComplete,
+      error: onError,
+      reconnecting: () => {
+        vcLog('warn', 'Reconnecting...');
+        setCallState('connecting');
+        setError('');
+      },
+      reconnected: () => {
+        vcLog('ok', 'Reconnected!');
+        setCallState('connected');
+      },
+      goaway: () => {},
+      inputtranscript: onInputTranscript,
+      outputtranscript: onOutputTranscript,
+    });
+
+    detachClientListenersRef.current = () => {
+      if (assistantSpeechTimeoutRef.current) {
+        clearTimeout(assistantSpeechTimeoutRef.current);
+      }
+      detach();
+    };
+  }, [decayRemoteVolume, performBargeIn, startTimer, stopRecorder, stopTimer, token]);
+
   /* ── Start call ── */
   const startCall = useCallback(async () => {
     if (!hasApiKey) {
@@ -405,6 +553,7 @@ export function useCompanionCall({
       await streamerRef.current.resume();
 
       clientRef.current = new GenAILiveClient({ apiKey });
+      registerClientListeners(clientRef.current);
 
       // Register greeting handler BEFORE connect, so setupcomplete is never missed
       clientRef.current.once('setupcomplete', () => {
@@ -418,8 +567,6 @@ export function useCompanionCall({
           });
         }
       });
-
-      setClientVersion((v) => v + 1);
 
       const baseConfig = {
         responseModalities: [Modality.AUDIO],
@@ -466,6 +613,7 @@ export function useCompanionCall({
     isConnected,
     isConnecting,
     liveModel,
+    registerClientListeners,
     token,
     userName,
   ]);
@@ -474,182 +622,6 @@ export function useCompanionCall({
     setMuted((prev) => !prev);
   }, []);
 
-  /* ── Event listeners ── */
-  useEffect(() => {
-    const client = clientRef.current;
-    if (!client) return undefined;
-
-    const onOpen = () => {
-      vcLog('ok', '📞 Call CONNECTED, starting timer');
-      setCallState('connected');
-      startTimer();
-    };
-
-    const onClose = (event) => {
-      vcWarn('📞 WebSocket CLOSED', event?.reason || '');
-      stopRecorder();
-      setRemoteVolume(0);
-      stopTimer();
-      if (intentionalHangupRef.current) {
-        intentionalHangupRef.current = false;
-        setCallState('idle');
-        return;
-      }
-      setCallState('error');
-      setError(event?.reason || 'Call connection dropped. Please try again.');
-    };
-
-    // ── Audio handler with flag-based ignore ──
-    const onAudio = (audioData) => {
-      // If we're in the ignore window (between interrupted → turnComplete),
-      // discard this audio — it's stale data from the old response.
-      if (ignoreAudioRef.current) {
-        return; // Silently drop stale audio
-      }
-
-      // Mark that the model turn is actively generating
-      modelTurnActiveRef.current = true;
-      isAssistantSpeakingRef.current = true;
-      setTurnState('ai-speaking');
-
-      if (assistantSpeechTimeoutRef.current) {
-        clearTimeout(assistantSpeechTimeoutRef.current);
-      }
-      assistantSpeechTimeoutRef.current = window.setTimeout(() => {
-        isAssistantSpeakingRef.current = false;
-        setTurnState('idle');
-        decayRemoteVolume();
-      }, SPEECH_END_TIMEOUT_MS);
-
-      const chunk = new Uint8Array(audioData);
-      streamerRef.current?.addPCM16(chunk);
-
-      const vol = estimatePcmVolume(audioData);
-      lastRemoteVolumeRef.current = vol;
-      setRemoteVolume(vol);
-    };
-
-    // ── Server-side barge-in ──
-    const onInterrupted = () => {
-      performBargeIn('server-interrupted');
-      // Discard partial AI transcript for cancelled turn
-      currentAITextRef.current = '';
-    };
-
-    // ── Turn complete ──
-    const onTurnComplete = () => {
-      const wasIgnoring = ignoreAudioRef.current;
-      const wasTurnActive = modelTurnActiveRef.current;
-
-      // Clear both flags — turn is fully done
-      ignoreAudioRef.current = false;
-      modelTurnActiveRef.current = false;
-
-      vcLog('event', `✅ Turn complete — ignoreAudio was: ${wasIgnoring}, modelTurnActive was: ${wasTurnActive}, both now: false`);
-
-      isAssistantSpeakingRef.current = false;
-      decayRemoteVolume();
-      setTimeout(() => {
-        setTurnState((current) => (current === 'ai-speaking' ? 'idle' : current));
-      }, 200);
-
-      // ── Flush transcript for this turn ──
-      const userText = currentUserTextRef.current.trim();
-      const aiText = currentAITextRef.current.trim();
-      if (userText) {
-        transcriptRef.current.push({ role: 'user', content: userText });
-        currentUserTextRef.current = '';
-      }
-      if (aiText) {
-        transcriptRef.current.push({ role: 'assistant', content: aiText });
-        currentAITextRef.current = '';
-      }
-      turnCountRef.current += 1;
-
-      // Save new messages to DB every turn
-      if (callIdRef.current && token) {
-        const newMessages = transcriptRef.current.slice(savedMsgCountRef.current);
-        if (newMessages.length > 0) {
-          savedMsgCountRef.current = transcriptRef.current.length;
-          apiRequest(`/api/calls/${callIdRef.current}/messages`, {
-            method: 'POST', token, body: { messages: newMessages },
-          }).catch(() => {});
-        }
-      }
-    };
-
-    const onSetupComplete = () => {
-      vcLog('ok', '🎯 Setup complete (effect listener)');
-      // Greeting is handled by the once() listener registered in startCall
-    };
-
-    const onError = (event) => {
-      vcErr('⚠️ ERROR event', event?.message || event);
-      setCallState('error');
-      setError(event?.message || 'Voice call encountered an error.');
-      stopRecorder();
-      stopTimer();
-    };
-
-    const onReconnecting = () => {
-      vcLog('warn', '♻️ Reconnecting...');
-      setCallState('connecting');
-      setError('');
-    };
-
-    const onReconnected = () => {
-      vcLog('ok', '♻️ Reconnected!');
-      setCallState('connected');
-    };
-
-    const onGoAway = (info) => {
-    };
-
-    // ── Transcript: accumulate user speech transcription ──
-    const onInputTranscript = (text) => {
-      if (text) currentUserTextRef.current += text + ' ';
-    };
-
-    // ── Transcript: accumulate AI speech transcription ──
-    const onOutputTranscript = (text) => {
-      if (text) {
-        currentAITextRef.current += text + ' ';
-        // Forward to gesture mapper callback
-        if (onAITranscriptRef.current) onAITranscriptRef.current(text);
-      }
-    };
-
-    client.on('open', onOpen);
-    client.on('close', onClose);
-    client.on('audio', onAudio);
-    client.on('interrupted', onInterrupted);
-    client.on('setupcomplete', onSetupComplete);
-    client.on('turncomplete', onTurnComplete);
-    client.on('error', onError);
-    client.on('reconnecting', onReconnecting);
-    client.on('reconnected', onReconnected);
-    client.on('goaway', onGoAway);
-    client.on('inputtranscript', onInputTranscript);
-    client.on('outputtranscript', onOutputTranscript);
-
-    return () => {
-      if (assistantSpeechTimeoutRef.current) {
-        clearTimeout(assistantSpeechTimeoutRef.current);
-      }
-      client.off('open', onOpen);
-      client.off('close', onClose);
-      client.off('audio', onAudio);
-      client.off('interrupted', onInterrupted);
-      client.off('setupcomplete', onSetupComplete);
-      client.off('turncomplete', onTurnComplete);
-      client.off('error', onError);
-      client.off('reconnecting', onReconnecting);
-      client.off('reconnected', onReconnected);
-      client.off('goaway', onGoAway);
-      client.off('inputtranscript', onInputTranscript);
-      client.off('outputtranscript', onOutputTranscript);
-    };
-  }, [stopRecorder, stopTimer, startTimer, userName, decayRemoteVolume, clientVersion, performBargeIn, token]);
 
   /* ── Mic control effect ── */
   useEffect(() => {
