@@ -1,4 +1,4 @@
-import { markPendingReflection } from './dashboardReflectionSession.js';
+import { markPendingReflection, setPendingReflectionCallId } from './dashboardReflectionSession.js';
 
 export function endCallAndNavigateImmediately({
   endCall,
@@ -9,6 +9,9 @@ export function endCallAndNavigateImmediately({
 }) {
   Promise.resolve()
     .then(() => endCall())
+    .then((callId) => {
+      if (callId) setPendingReflectionCallId(callId);
+    })
     .catch(() => {
       // Leaving the call screen is more important than blocking on final cleanup.
     });

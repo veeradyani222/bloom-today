@@ -4,11 +4,15 @@ import { isReflectionPending } from '../components/dashboard/overviewStateLogic'
 import {
   clearPendingReflection,
   hasPendingReflectionMarker,
+  isReflectionReady,
 } from './dashboardReflectionSession';
 
 function shouldPollForReflection(insights, role) {
   if (role !== 'mom' || !insights) return false;
-  if (insights?.mom?.current) return false;
+
+  if (isReflectionReady(insights)) {
+    return false;
+  }
 
   if (isReflectionPending(insights?.mom, insights)) {
     return true;
@@ -18,7 +22,7 @@ function shouldPollForReflection(insights, role) {
 }
 
 const dashboardCache = new Map();
-const DASHBOARD_CACHE_VERSION = 'v2-resources-embed-check';
+const DASHBOARD_CACHE_VERSION = 'v3-pending-call-reflection';
 const REFLECTION_POLL_INTERVAL_MS = 2500;
 const REFLECTION_POLL_MAX_ATTEMPTS = 30;
 
@@ -68,7 +72,7 @@ export function useDashboardData(token, role = 'mom') {
     setInsights(nextInsights);
     setDaySeries(nextDaySeries);
 
-    if (nextInsights?.mom?.current) {
+    if (nextInsights?.mom?.current && isReflectionReady(nextInsights)) {
       clearPendingReflection();
       setReflectionTimedOut(false);
       pollAttemptsRef.current = 0;
@@ -159,7 +163,7 @@ export function useDashboardData(token, role = 'mom') {
 
         applyCorePayload(nextInsights, nextDaySeries, nextCore);
 
-        if (nextInsights?.mom?.current) {
+        if (isReflectionReady(nextInsights)) {
           return;
         }
 

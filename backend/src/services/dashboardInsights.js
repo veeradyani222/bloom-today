@@ -852,6 +852,7 @@ async function analyzeCallSession({ callId, userId }) {
 
   const messages = messagesRes.rows;
   if (!messages.length) {
+    console.warn('[CALLS] analysis_skipped_no_messages', { callId, userId });
     return null;
   }
 
@@ -1317,6 +1318,8 @@ async function getDashboardInsights({ userId, role = 'mom', timeZone = DEFAULT_T
     activity,
     mom: {
       current: analyses[0]?.analysis || null,
+      currentCallId: analyses[0]?.callId || null,
+      currentAnalyzedAt: analyses[0]?.analyzedAt || null,
       narratives: narratives?.mom || null,
       day: rollups.day,
       week: rollups.week,

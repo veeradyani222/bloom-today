@@ -1,4 +1,5 @@
 import { getActivityCallCount } from '../../lib/dashboardActivity.js';
+import { getPendingReflectionCallId } from '../../pages/dashboardReflectionSession.js';
 
 export function hasCompletedCallActivity(insights = {}) {
   const activity = insights?.activity || {};
@@ -7,11 +8,22 @@ export function hasCompletedCallActivity(insights = {}) {
 }
 
 export function isReflectionPending(data, insights = {}) {
-  if (data?.current) return false;
+  if (data?.current) {
+    const pendingCallId = getPendingReflectionCallId();
+    if (pendingCallId && data?.currentCallId !== pendingCallId) {
+      return true;
+    }
+    if (!pendingCallId) return false;
+  }
   return hasCompletedCallActivity(insights);
 }
 
 export function getMomOverviewState(data, insights = {}, { reflectionTimedOut = false } = {}) {
+  const pendingCallId = getPendingReflectionCallId();
+  if (pendingCallId && data?.currentCallId !== pendingCallId) {
+    return reflectionTimedOut ? 'processing' : 'loading';
+  }
+
   if (data?.current) return 'content';
 
   if (!hasCompletedCallActivity(insights)) {

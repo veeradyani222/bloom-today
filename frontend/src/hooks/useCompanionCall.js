@@ -326,13 +326,14 @@ export function useCompanionCall({
               finalCallId = await pendingCallStart;
             }
 
-            if (!finalCallId) return;
+            if (!finalCallId) return null;
 
             try {
               if (unsaved.length > 0) {
                 await apiRequest(`/api/calls/${finalCallId}/messages`, {
                   method: 'POST',
                   token,
+                  keepalive: true,
                   body: { messages: unsaved },
                 });
               }
@@ -340,14 +341,18 @@ export function useCompanionCall({
               await apiRequest(`/api/calls/${finalCallId}/end`, {
                 method: 'PUT',
                 token,
+                keepalive: true,
                 body: {},
               });
             }
+
+            return finalCallId;
           } catch {
             // Dashboard can still recover on the next completed call.
+            return null;
           }
         })()
-      : Promise.resolve();
+      : Promise.resolve(null);
     return finalizePromise;
   }, [stopRecorder, stopTimer, token]);
 

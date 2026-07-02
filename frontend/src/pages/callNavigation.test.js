@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { endCallAndNavigateImmediately } from './callNavigation.js';
 
-import { PENDING_REFLECTION_KEY } from './dashboardReflectionSession.js';
+import { PENDING_CALL_ID_KEY, PENDING_REFLECTION_KEY } from './dashboardReflectionSession.js';
 
 describe('endCallAndNavigateImmediately', () => {
   it('navigates before waiting for async call finalization', async () => {
@@ -49,6 +49,32 @@ describe('endCallAndNavigateImmediately', () => {
       globalThis.sessionStorage = previousStorage;
     }
 
-    resolveEndCall();
+    resolveEndCall('call-123');
+    await endCallPromise;
+  });
+
+  it('stores the pending call id after finalization resolves', async () => {
+    const previousStorage = globalThis.sessionStorage;
+    const storage = new Map();
+    globalThis.sessionStorage = {
+      setItem: (key, value) => storage.set(key, value),
+      getItem: (key) => storage.get(key) ?? null,
+      removeItem: (key) => storage.delete(key),
+    };
+
+    try {
+      endCallAndNavigateImmediately({
+        endCall: async () => 'call-456',
+        clearDashboardCache: () => {},
+        navigate: () => {},
+        to: '/dashboard',
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      assert.equal(storage.get(PENDING_CALL_ID_KEY), 'call-456');
+    } finally {
+      globalThis.sessionStorage = previousStorage;
+    }
   });
 });

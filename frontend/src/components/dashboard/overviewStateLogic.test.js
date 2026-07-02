@@ -3,6 +3,23 @@ import { describe, it } from 'node:test';
 
 import { getMomOverviewState } from './overviewStateLogic.js';
 import { DASHBOARD_LOADING_STEPS } from './dashboardLoadingSteps.js';
+import { PENDING_CALL_ID_KEY } from '../../pages/dashboardReflectionSession.js';
+
+function withSessionStorage(run) {
+  const previousStorage = globalThis.sessionStorage;
+  const storage = new Map();
+  globalThis.sessionStorage = {
+    setItem: (key, value) => storage.set(key, value),
+    getItem: (key) => storage.get(key) ?? null,
+    removeItem: (key) => storage.delete(key),
+  };
+
+  try {
+    return run(storage);
+  } finally {
+    globalThis.sessionStorage = previousStorage;
+  }
+}
 
 describe('getMomOverviewState', () => {
   it('keeps the dashboard loading when calls exist but no reflection is ready', () => {
@@ -15,12 +32,27 @@ describe('getMomOverviewState', () => {
   });
 
   it('uses the content dashboard when a current reflection exists', () => {
-    const state = getMomOverviewState(
-      { current: { conversationSummary: 'Today felt lighter.' } },
-      { activity: { totalCalls: 1 } },
-    );
+    withSessionStorage(() => {
+      const state = getMomOverviewState(
+        { current: { conversationSummary: 'Today felt lighter.' }, currentCallId: 'call-1' },
+        { activity: { totalCalls: 1 } },
+      );
 
-    assert.equal(state, 'content');
+      assert.equal(state, 'content');
+    });
+  });
+
+  it('shows loading while waiting for a newer call reflection', () => {
+    withSessionStorage((storage) => {
+      storage.set(PENDING_CALL_ID_KEY, 'call-2');
+
+      const state = getMomOverviewState(
+        { current: { conversationSummary: 'Yesterday felt heavy.' }, currentCallId: 'call-1' },
+        { activity: { totalCalls: 2 } },
+      );
+
+      assert.equal(state, 'loading');
+    });
   });
 
   it('uses the empty dashboard before the first call', () => {

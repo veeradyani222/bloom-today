@@ -228,19 +228,20 @@ export class GenAILiveClient extends EventEmitter {
       this.emit('generationcomplete');
     }
 
-    // Turn complete
-    if (serverContent.turnComplete) {
-      log('event', `✅ Turn complete (${elapsed()}) — total audio chunks this turn: ${this._audioChunkCount}`);
-      this._audioChunkCount = 0;
-      this.emit('turncomplete');
-    }
-
-    // Transcription events (used for analytics and context summarization)
+    // Transcription must be processed before turnComplete so transcript buffers
+    // are populated when listeners flush on turn end.
     if (serverContent.inputTranscription?.text) {
       this.emit('inputtranscript', serverContent.inputTranscription.text);
     }
     if (serverContent.outputTranscription?.text) {
       this.emit('outputtranscript', serverContent.outputTranscription.text);
+    }
+
+    // Turn complete
+    if (serverContent.turnComplete) {
+      log('event', `✅ Turn complete (${elapsed()}) — total audio chunks this turn: ${this._audioChunkCount}`);
+      this._audioChunkCount = 0;
+      this.emit('turncomplete');
     }
 
     // Audio and content (skip if interrupted)

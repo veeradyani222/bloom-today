@@ -1,8 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-export async function apiRequest(path, { method = 'GET', token, body } = {}) {
+export async function apiRequest(path, { method = 'GET', token, body, keepalive = false } = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
+    keepalive,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
