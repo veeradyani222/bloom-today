@@ -38,7 +38,16 @@ test('dashboard activity counts completed calls even when analysis is missing', 
 test('dashboard Gemini model candidates default to supported generateContent models', () => {
   const candidates = _private.getAnalysisModelCandidates();
 
-  assert.deepEqual(candidates, ['gemini-2.5-pro', 'gemini-2.5-flash']);
+  assert.deepEqual(candidates, [
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-flash-lite-latest',
+    'gemini-flash-latest',
+    'gemini-2.5-pro',
+    'gemini-pro-latest',
+  ]);
 });
 
 test('Gemini model-not-found errors are retryable so fallback candidates can run', () => {
@@ -55,5 +64,56 @@ test('dashboard hasData is true when completed calls exist before analysis', () 
 });
 
 test('optional dashboard AI uses low-cost models without extra environment configuration', () => {
-  assert.deepEqual(_private.getOptionalDashboardModelCandidates(), ['gemini-2.5-flash-lite', 'gemini-2.5-flash']);
+  assert.deepEqual(_private.getOptionalDashboardModelCandidates(), [
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-flash-latest',
+  ]);
+});
+
+test('Gemini generation skips a quota-exhausted model on retry', async () => {
+  _private.clearExhaustedGeminiModels();
+
+  const attemptedModels = [];
+  const response = await _private.generateGeminiContent({
+    label: 'test-quota-skip',
+    maxRetries: 2,
+    modelCandidates: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+    contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+    generateContent: async ({ model }) => {
+      attemptedModels.push(model);
+      if (model === 'gemini-2.5-flash-lite') {
+        const error = new Error('RESOURCE_EXHAUSTED: quota exceeded');
+        error.status = 429;
+        throw error;
+      }
+      return { text: 'ok' };
+    },
+    waitFn: async () => {},
+  });
+
+  assert.equal(response.text, 'ok');
+  assert.deepEqual(attemptedModels, ['gemini-2.5-flash-lite', 'gemini-2.5-flash']);
+
+  await assert.rejects(
+    () => _private.generateGeminiContent({
+      label: 'test-quota-skip-again',
+      maxRetries: 0,
+      modelCandidates: ['gemini-2.5-flash-lite'],
+      contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      generateContent: async ({ model }) => {
+        attemptedModels.push(model);
+        return { text: 'unexpected' };
+      },
+      waitFn: async () => {},
+    }),
+    /All Gemini model candidates are marked as quota exhausted/,
+  );
+
+  assert.deepEqual(attemptedModels, ['gemini-2.5-flash-lite', 'gemini-2.5-flash']);
+
+  _private.clearExhaustedGeminiModels();
 });

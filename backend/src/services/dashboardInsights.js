@@ -6,13 +6,31 @@ const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 const ANALYSIS_MODEL = process.env.GEMINI_ANALYSIS_MODEL || config.geminiModel;
 const ANALYSIS_FALLBACK_MODEL = process.env.GEMINI_ANALYSIS_FALLBACK_MODEL || '';
 const ANALYSIS_MODEL_ROTATION = (process.env.GEMINI_ANALYSIS_MODEL_ROTATION
-  || 'gemini-2.5-pro,gemini-2.5-flash')
+  || [
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-flash-lite-latest',
+    'gemini-flash-latest',
+    'gemini-2.5-pro',
+    'gemini-pro-latest',
+  ].join(','))
   .split(',')
   .map((model) => model.trim())
   .filter(Boolean);
-const OPTIONAL_DASHBOARD_MODEL_CANDIDATES = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+const OPTIONAL_DASHBOARD_MODEL_CANDIDATES = [
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-flash-latest',
+];
+const MODEL_EXHAUSTION_DURATION_MS = Number(process.env.GEMINI_MODEL_EXHAUSTION_MS || 5 * 60 * 1000);
 const DEFAULT_TIMEZONE = process.env.DASHBOARD_TIMEZONE || 'Asia/Kolkata';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const exhaustedGeminiModels = new Map();
 
 function clampScore(value, fallback = 50) {
   const number = Number(value);
@@ -744,6 +762,15 @@ function getErrorStatus(error) {
   return Number(error?.status || error?.error?.code || 0);
 }
 
+function isGeminiQuotaError(error) {
+  const status = getErrorStatus(error);
+  const message = String(error?.message || '').toLowerCase();
+  return status === 429
+    || message.includes('resource_exhausted')
+    || message.includes('quota exceeded')
+    || message.includes('too many requests');
+}
+
 function isRetryableGeminiError(error) {
   const status = getErrorStatus(error);
   if ([429, 500, 502, 503, 504].includes(status)) return true;
@@ -760,10 +787,36 @@ function isRetryableGeminiError(error) {
 
 function getAnalysisModelCandidates() {
   return uniqueStrings([
+    ...ANALYSIS_MODEL_ROTATION,
     ANALYSIS_MODEL,
     ANALYSIS_FALLBACK_MODEL,
-    ...ANALYSIS_MODEL_ROTATION,
   ], 12);
+}
+
+function clearExpiredGeminiExhaustions(now = Date.now()) {
+  for (const [model, exhaustedUntil] of exhaustedGeminiModels.entries()) {
+    if (now >= exhaustedUntil) {
+      exhaustedGeminiModels.delete(model);
+    }
+  }
+}
+
+function markGeminiModelExhausted(model, now = Date.now()) {
+  exhaustedGeminiModels.set(model, now + MODEL_EXHAUSTION_DURATION_MS);
+}
+
+function isGeminiModelExhausted(model, now = Date.now()) {
+  clearExpiredGeminiExhaustions(now);
+  return exhaustedGeminiModels.has(model);
+}
+
+function clearExhaustedGeminiModels() {
+  exhaustedGeminiModels.clear();
+}
+
+function getNextAvailableGeminiModel(candidates, attemptedModels = new Set()) {
+  clearExpiredGeminiExhaustions();
+  return candidates.find((model) => model && !attemptedModels.has(model) && !exhaustedGeminiModels.has(model)) || null;
 }
 
 async function generateGeminiContent({
@@ -772,30 +825,44 @@ async function generateGeminiContent({
   label = 'generate-content',
   maxRetries = 3,
   modelCandidates = getAnalysisModelCandidates(),
+  generateContent = (request) => ai.models.generateContent(request),
+  waitFn = wait,
 }) {
   if (!modelCandidates.length) {
     modelCandidates = [ANALYSIS_MODEL];
   }
+  modelCandidates = uniqueStrings(modelCandidates, 12);
 
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const model = modelCandidates[attempt % modelCandidates.length] || ANALYSIS_MODEL;
+  const maxAttempts = Math.min(maxRetries + 1, modelCandidates.length);
+  const attemptedModels = new Set();
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const model = getNextAvailableGeminiModel(modelCandidates, attemptedModels);
+    if (!model) {
+      throw new Error('All Gemini model candidates are marked as quota exhausted.');
+    }
+    attemptedModels.add(model);
 
     try {
-      return await ai.models.generateContent({
+      return await generateContent({
         model,
         contents,
         config: generationConfig,
       });
     } catch (error) {
+      if (isGeminiQuotaError(error)) {
+        markGeminiModelExhausted(model);
+      }
+
       const retryable = isRetryableGeminiError(error);
-      const canRetry = retryable && attempt < maxRetries;
+      const canRetry = retryable && attempt < maxAttempts - 1;
       if (!canRetry) throw error;
 
       const delayMs = (700 * (2 ** attempt)) + Math.floor(Math.random() * 300);
       console.warn(
-        `[DASHBOARD] gemini_retry label=${label} model=${model} attempt=${attempt + 1}/${maxRetries + 1} delayMs=${delayMs} status=${getErrorStatus(error) || 'n/a'}`,
+        `[DASHBOARD] gemini_retry label=${label} model=${model} attempt=${attempt + 1}/${maxAttempts} delayMs=${delayMs} status=${getErrorStatus(error) || 'n/a'}`,
       );
-      await wait(delayMs);
+      await waitFn(delayMs);
     }
   }
 
@@ -887,11 +954,13 @@ Transcript:
 ${transcriptText}
 `.trim();
 
+  const analysisModelCandidates = getAnalysisModelCandidates();
   const rawAnalysis = await generateStructuredJson({
     prompt,
     schema: callAnalysisSchema,
     label: 'call-analysis',
-    maxRetries: 3,
+    maxRetries: analysisModelCandidates.length - 1,
+    modelCandidates: analysisModelCandidates,
   });
   const analysis = normalizeCallAnalysis(rawAnalysis, session);
 
@@ -1448,10 +1517,12 @@ async function compressMemoriesIfNeeded(userId, level) {
   const ids = items.map((r) => r.id);
   const contentList = items.map((r, i) => `${i + 1}. ${r.content}`).join('\n');
   const oldestDate = items[0].bucket_date;
+  const memoryModelCandidates = getOptionalDashboardModelCandidates();
 
   const compressRes = await generateGeminiContent({
     label: 'memory-compress',
-    maxRetries: 4,
+    maxRetries: memoryModelCandidates.length - 1,
+    modelCandidates: memoryModelCandidates,
     contents: [{
       role: 'user',
       parts: [{ text: `Compress these ${items.length} personal insights about the same postpartum mom into 1 sentence (max 45 words), capturing the most important recurring patterns. Be specific, not generic.\n\n${contentList}\n\nCompressed insight:` }],
@@ -1502,11 +1573,13 @@ async function recordCallMemory({ callId, userId }) {
   const userName = session.full_name || 'the user';
   const companionName = session.companion_name || 'Companion';
   const transcriptText = buildTranscriptText(msgRes.rows, userName, companionName);
+  const memoryModelCandidates = getOptionalDashboardModelCandidates();
 
   // Generate a 1-sentence insight about the user from this call
   const insightRes = await generateGeminiContent({
     label: 'memory-insight',
-    maxRetries: 4,
+    maxRetries: memoryModelCandidates.length - 1,
+    modelCandidates: memoryModelCandidates,
     contents: [{
       role: 'user',
       parts: [{ text: `From the following postpartum support conversation, extract ONE specific personal insight about the mom that would help a future companion support her better.\n\nRules:\n- One sentence only, max 28 words\n- Be specific and personal — not generic\n- Focus on: preferences, fears, joys, what helps her, what she finds hard, her situation or personality\n- If nothing meaningful is observable, reply with exactly: SKIP\n- Start with "She", "Prefers", or "Tends to"\n\nTranscript:\n${transcriptText}\n\nOne insight:` }],
@@ -1529,7 +1602,8 @@ async function recordCallMemory({ callId, userId }) {
     // Merge today's existing insight + the new one into one updated sentence
     const mergeRes = await generateGeminiContent({
       label: 'memory-merge',
-      maxRetries: 4,
+      maxRetries: memoryModelCandidates.length - 1,
+      modelCandidates: memoryModelCandidates,
       contents: [{
         role: 'user',
         parts: [{ text: `Combine these two personal insights about the same postpartum mom into one sentence (max 35 words), keeping the most specific details:\n1. ${existing.rows[0].content}\n2. ${newInsight}\n\nCombined insight:` }],
@@ -1564,9 +1638,12 @@ module.exports = {
   recordCallMemory,
   _private: {
     buildActivitySummary,
+    clearExhaustedGeminiModels,
+    generateGeminiContent,
     getAnalysisModelCandidates,
     getOptionalDashboardModelCandidates,
     hasDashboardData,
+    isGeminiModelExhausted,
     isRetryableGeminiError,
   },
 };
