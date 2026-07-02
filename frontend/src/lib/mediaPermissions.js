@@ -24,9 +24,49 @@ export function isLikelySafariBrowser() {
   const isWebKit = /WebKit/i.test(ua);
   const isOtherIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
   const isDesktopSafari = /Safari/i.test(ua)
-    && !/Chrome|Chromium|Android|Edg|OPR|Firefox/i.test(ua);
+    && !/Chrome|Chromium|Android|Edg|OPR|Firefox|CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
 
   return (isIOSDevice() && isWebKit && !isOtherIOSBrowser) || isDesktopSafari;
+}
+
+export function getBrowserName() {
+  if (typeof navigator === 'undefined') return 'Unknown browser';
+
+  const ua = navigator.userAgent || '';
+  if (/CriOS/i.test(ua)) return 'Chrome iOS';
+  if (/FxiOS/i.test(ua)) return 'Firefox iOS';
+  if (/EdgiOS/i.test(ua)) return 'Edge iOS';
+  if (/OPiOS/i.test(ua)) return 'Opera iOS';
+  if (/Edg/i.test(ua)) return 'Edge';
+  if (/OPR|Opera/i.test(ua)) return 'Opera';
+  if (/Firefox/i.test(ua)) return 'Firefox';
+  if (/Chrome|Chromium/i.test(ua)) return 'Chrome';
+  if (/Safari/i.test(ua)) return 'Safari';
+  return 'Unknown browser';
+}
+
+export function getCallBrowserSupport() {
+  if (isIOSDevice()) {
+    return {
+      supported: false,
+      reason: 'ios-unsupported',
+      browserName: getBrowserName(),
+    };
+  }
+
+  if (isLikelySafariBrowser()) {
+    return {
+      supported: false,
+      reason: 'safari-unsupported',
+      browserName: getBrowserName(),
+    };
+  }
+
+  return {
+    supported: true,
+    reason: null,
+    browserName: getBrowserName(),
+  };
 }
 
 function permissionTargetLabel({ audio, video }) {

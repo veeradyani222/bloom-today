@@ -56,6 +56,28 @@ test('callDebug stores sanitized logs and exposes a dump helper', () => {
   assert.equal(lines.length, 1);
 });
 
+test('callDebug drops hot audio-path logs unless verbose debugging is enabled', () => {
+  const stored = {};
+  const lines = [];
+
+  setGlobal('window', {
+    localStorage: {
+      setItem: (key, value) => { stored[key] = value; },
+      removeItem: (key) => { delete stored[key]; },
+    },
+  });
+  setGlobal('console', { log: (...args) => lines.push(args) });
+
+  callDebug('live-client', 'send-realtime-input', {
+    mimeType: 'audio/pcm;rate=16000',
+    payloadChars: 684,
+  });
+
+  assert.equal(globalThis.window.__bloomCallDebug, undefined);
+  assert.deepEqual(stored, {});
+  assert.equal(lines.length, 0);
+});
+
 test('getBrowserDiagnostics records Safari-relevant media and audio capabilities', () => {
   setGlobal('window', {
     isSecureContext: true,

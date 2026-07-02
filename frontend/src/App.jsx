@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { apiRequest } from './lib/api';
+import { getCallBrowserSupport } from './lib/mediaPermissions';
 import './index.css';
 
 // Constants
@@ -18,6 +19,7 @@ import { CompanionSetupPage, YouPage } from './pages/YouPage';
 import { MyClientsPage } from './pages/MyClientsPage';
 import { VoiceCallPage } from './pages/VoiceCallPage';
 import { VideoCallPage } from './pages/VideoCallPage';
+import { SafariBrowserNotice } from './components/SafariBrowserNotice';
 
 function loadSession() {
   try {
@@ -44,6 +46,14 @@ function ProtectedRoute({ session, children, allowedRoles = ['mom', 'therapist',
   const role = session?.user?.auth_role || 'mom';
   if (!allowedRoles.includes(role)) {
     return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+function CallBrowserGate({ children }) {
+  const support = getCallBrowserSupport();
+  if (!support.supported) {
+    return <SafariBrowserNotice reason={support.reason} />;
   }
   return children;
 }
@@ -307,10 +317,12 @@ function App() {
         path="/call"
         element={
           <ProtectedRoute session={session} allowedRoles={['mom']}>
-            <VoiceCallPage
-              token={token}
-              session={session}
-            />
+            <CallBrowserGate>
+              <VoiceCallPage
+                token={token}
+                session={session}
+              />
+            </CallBrowserGate>
           </ProtectedRoute>
         }
       />
@@ -318,10 +330,12 @@ function App() {
         path="/video-call"
         element={
           <ProtectedRoute session={session} allowedRoles={['mom']}>
-            <VideoCallPage
-              token={token}
-              session={session}
-            />
+            <CallBrowserGate>
+              <VideoCallPage
+                token={token}
+                session={session}
+              />
+            </CallBrowserGate>
           </ProtectedRoute>
         }
       />

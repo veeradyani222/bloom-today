@@ -1,6 +1,16 @@
 const STORAGE_KEY = 'bloom-call-debug-log';
 const MAX_ENTRIES = 600;
 const SENSITIVE_KEYS = /token|key|secret|credential|authorization|data|audio|base64|text|message/i;
+const HOT_PATH_EVENTS = new Set([
+  'add-pcm16',
+  'audio-chunk',
+  'chunk',
+  'message-received',
+  'remote-audio',
+  'schedule-buffer',
+  'send-realtime-input',
+  'volume',
+]);
 
 let entries = [];
 let sessionId = null;
@@ -104,6 +114,12 @@ function installGlobalHelpers() {
       // Ignore storage failures in private browsing modes.
     }
   };
+  w.__bloomCallDebug.enableVerboseAudio = () => {
+    w.__bloomCallDebugVerbose = true;
+  };
+  w.__bloomCallDebug.disableVerboseAudio = () => {
+    w.__bloomCallDebugVerbose = false;
+  };
 }
 
 function persist() {
@@ -116,7 +132,21 @@ function persist() {
   }
 }
 
+function isHotPathEvent(scope, event) {
+  return (
+    (scope === 'live-client' || scope === 'audio-recorder' || scope === 'audio-streamer' || scope === 'voice-call') &&
+    HOT_PATH_EVENTS.has(event)
+  );
+}
+
+function shouldDropHotPathEvent(scope, event) {
+  const w = getWindow();
+  return isHotPathEvent(scope, event) && !w?.__bloomCallDebugVerbose;
+}
+
 export function callDebug(scope, event, details = {}) {
+  if (shouldDropHotPathEvent(scope, event)) return null;
+
   installGlobalHelpers();
   const entry = {
     t: nowIso(),
