@@ -7,7 +7,7 @@ import { OverviewHeroSection } from './OverviewHeroSection';
 import { OverviewMoodSection } from './OverviewMoodSection';
 import { OverviewResourcesSection } from './OverviewResourcesSection';
 import { OverviewScoreSection } from './OverviewScoreSection';
-import { OverviewEmptyState, OverviewLoading, OverviewProcessingState } from './OverviewStates';
+import { OverviewEmptyState, OverviewProcessingState, OverviewSkeletonCard } from './OverviewStates';
 import { getMomOverviewState } from './overviewStateLogic';
 
 function MomOverviewContent({
@@ -31,29 +31,51 @@ function MomOverviewContent({
     return <OverviewEmptyState illustration={welcomeIllustration} />;
   }
 
-  if (overviewState === 'loading') {
-    return <OverviewLoading />;
-  }
-
   if (overviewState === 'processing') {
     return <OverviewProcessingState illustration={thankYouIllustration} />;
   }
 
+  const isProgressive = overviewState === 'progressive';
+
   return (
     <>
-      <OverviewHeroSection data={data} firstName={firstName} illustration={thankYouIllustration} />
+      <OverviewHeroSection
+        data={data}
+        firstName={firstName}
+        illustration={thankYouIllustration}
+        pending={isProgressive}
+      />
       <OverviewScoreSection
         week={week}
         current={current}
         daySeries={daySeries}
         activity={insights?.activity}
+        pending={isProgressive}
       />
       <OverviewActionsSection companionName={companionName} illustration={jumpBackIllustration} />
-      <QuickTips scores={current?.signalScores} tips={quickTips?.tips} summary={quickTips?.summary} />
-      <OverviewResourcesSection resources={data?.resources} />
-      <OverviewMoodSection current={current} daySeries={daySeries} insights={insights} />
+      {isProgressive ? (
+        <OverviewSkeletonCard title="Quick tips for you" lines={3} className="dash-skeleton-tips-card" />
+      ) : (
+        <QuickTips scores={current?.signalScores} tips={quickTips?.tips} summary={quickTips?.summary} />
+      )}
+      {isProgressive ? (
+        <OverviewSkeletonCard title="Resources for you" lines={2} className="dash-skeleton-resources-card" />
+      ) : (
+        <OverviewResourcesSection resources={data?.resources} />
+      )}
+      <OverviewMoodSection
+        current={current}
+        daySeries={daySeries}
+        insights={insights}
+        pending={isProgressive}
+      />
       <OverviewCommunitySection momTips={momTips} />
-      <OverviewBloomNoteSection data={data} current={current} firstName={firstName} />
+      <OverviewBloomNoteSection
+        data={data}
+        current={current}
+        firstName={firstName}
+        pending={isProgressive}
+      />
     </>
   );
 }

@@ -21,7 +21,7 @@ export function isReflectionPending(data, insights = {}) {
 export function getMomOverviewState(data, insights = {}, { reflectionTimedOut = false } = {}) {
   const pendingCallId = getPendingReflectionCallId();
   if (pendingCallId && data?.currentCallId !== pendingCallId) {
-    return reflectionTimedOut ? 'processing' : 'loading';
+    return reflectionTimedOut ? 'processing' : 'progressive';
   }
 
   if (data?.current) return 'content';
@@ -30,5 +30,5 @@ export function getMomOverviewState(data, insights = {}, { reflectionTimedOut = 
     return 'empty';
   }
 
-  return reflectionTimedOut ? 'processing' : 'loading';
+  return reflectionTimedOut ? 'processing' : 'progressive';
 }

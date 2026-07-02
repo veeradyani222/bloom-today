@@ -109,6 +109,49 @@
 .dash-screen-loader-illustration.is-active { opacity: 1; transform: translateY(0) scale(1); }
 .dash-screen-loader-text { min-height: 1.5em; margin: -10px 0 0; color: var(--muted); font-weight: 700; font-size: 0.95rem; line-height: 1.5; text-align: center; }
 
+@keyframes dashSkeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.dash-skeleton-lines { display: grid; gap: 10px; width: 100%; }
+.dash-skeleton-lines-compact { gap: 8px; max-width: 220px; margin: 0 auto; }
+.dash-skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(17,24,39,0.08) 0%, rgba(17,24,39,0.16) 45%, rgba(17,24,39,0.08) 90%);
+  background-size: 200% 100%;
+  animation: dashSkeletonShimmer 1.4s ease-in-out infinite;
+}
+.dash-skeleton-line-1 { width: 92%; }
+.dash-skeleton-line-2 { width: 78%; }
+.dash-skeleton-line-3 { width: 64%; }
+.dash-skeleton-line-4 { width: 48%; }
+.dash-skeleton-lines-on-dark .dash-skeleton-line {
+  background: linear-gradient(90deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.42) 45%, rgba(255,255,255,0.18) 90%);
+  background-size: 200% 100%;
+}
+.dash-skeleton-card { pointer-events: none; }
+.dash-skeleton-card h3 { margin-bottom: 12px; }
+.dash-skeleton-bloom-card { pointer-events: none; }
+.dash-skeleton-bloom-meter { display: grid; place-items: center; min-height: 136px; }
+.dash-skeleton-ring {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, rgba(236,72,153,0.08) 0%, rgba(236,72,153,0.18) 45%, rgba(236,72,153,0.08) 90%);
+  background-size: 200% 100%;
+  animation: dashSkeletonShimmer 1.4s ease-in-out infinite;
+}
+.dash-skeleton-encourage { pointer-events: none; cursor: default; }
+.dash-skeleton-encourage .dash-skeleton-line {
+  background: linear-gradient(90deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.34) 45%, rgba(255,255,255,0.16) 90%);
+  background-size: 200% 100%;
+}
+.dash-skeleton-tips-card { background: #eff6ff; border: none; }
+.dash-skeleton-resources-card { margin-bottom: 16px; }
+
 /* ═══ 1. HERO (pink) ═══ */
 .sec-hero { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 16px; padding: 28px 24px; border-radius: var(--radius); background: var(--pink); color: #fff; }
 .dash-kicker { display: inline-block; padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,0.2); color: #fff; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }

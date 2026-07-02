@@ -44,6 +44,25 @@ export function OverviewLoading() {
   return <CenteredDashboardLoader />;
 }
 
+export function SkeletonLines({ lines = 3, className = '' }) {
+  return (
+    <div className={`dash-skeleton-lines ${className}`.trim()} aria-hidden="true">
+      {Array.from({ length: lines }).map((_, index) => (
+        <span key={index} className={`dash-skeleton-line dash-skeleton-line-${index + 1}`} />
+      ))}
+    </div>
+  );
+}
+
+export function OverviewSkeletonCard({ title, lines = 3, className = '' }) {
+  return (
+    <section className={`sec-card dash-skeleton-card ${className}`}>
+      {title ? <h3>{title}</h3> : null}
+      <SkeletonLines lines={lines} />
+    </section>
+  );
+}
+
 export function OverviewProcessingState({ illustration }) {
   return (
     <section className="dash-empty-state">

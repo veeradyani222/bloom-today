@@ -22,13 +22,13 @@ function withSessionStorage(run) {
 }
 
 describe('getMomOverviewState', () => {
-  it('keeps the dashboard loading when calls exist but no reflection is ready', () => {
+  it('shows a progressive dashboard when calls exist but no reflection is ready', () => {
     const state = getMomOverviewState(
       { current: null },
       { activity: { totalCalls: 1, callsToday: 1, callsThisWeek: 1 } },
     );
 
-    assert.equal(state, 'loading');
+    assert.equal(state, 'progressive');
   });
 
   it('uses the content dashboard when a current reflection exists', () => {
@@ -42,7 +42,7 @@ describe('getMomOverviewState', () => {
     });
   });
 
-  it('shows loading while waiting for a newer call reflection', () => {
+  it('shows a progressive dashboard while waiting for a newer call reflection', () => {
     withSessionStorage((storage) => {
       storage.set(PENDING_CALL_ID_KEY, 'call-2');
 
@@ -51,7 +51,7 @@ describe('getMomOverviewState', () => {
         { activity: { totalCalls: 2 } },
       );
 
-      assert.equal(state, 'loading');
+      assert.equal(state, 'progressive');
     });
   });
 
