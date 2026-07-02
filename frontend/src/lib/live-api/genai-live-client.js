@@ -1,7 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import EventEmitter from 'eventemitter3';
 import { callDebug } from './call-debug.js';
-import { base64ToArrayBuffer } from './utils';
+import { buildLiveConnectConfig } from './live-config.js';
+import { base64ToArrayBuffer } from './utils.js';
 
 function emitAudioParts(parts, emitAudio) {
   if (!Array.isArray(parts)) return [];
@@ -27,6 +28,22 @@ function elapsed() {
 
 function log(level, event, details = {}) {
   callDebug('live-client', event, { level, ...details });
+}
+
+function isClosedWebSocketError(error) {
+  return /websocket is already in closing or closed state/i.test(error?.message || String(error || ''));
+}
+
+function normalizeClientContentTurn(turn) {
+  if (typeof turn === 'string') {
+    return { role: 'user', parts: [{ text: turn }] };
+  }
+
+  if (turn?.text && !turn.parts && !turn.role) {
+    return { role: 'user', parts: [{ text: turn.text }] };
+  }
+
+  return turn;
 }
 
 export class GenAILiveClient extends EventEmitter {
@@ -73,21 +90,9 @@ export class GenAILiveClient extends EventEmitter {
     });
 
     try {
-      const fullConfig = {
-        ...config,
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
-        contextWindowCompression: {
-          slidingWindow: { targetTokens: 6000 },
-          triggerTokens: 15000,
-        },
-        sessionResumption: {
-          handle: this._resumptionHandle || undefined,
-        },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-      };
+      const fullConfig = buildLiveConnectConfig(config, {
+        resumptionHandle: this._resumptionHandle,
+      });
 
       this.session = await this.client.live.connect({
         model,
@@ -311,6 +316,17 @@ export class GenAILiveClient extends EventEmitter {
         });
       });
     } catch (error) {
+      if (isClosedWebSocketError(error)) {
+        this.status = 'disconnected';
+        this.session = null;
+        log('warn', 'send-realtime-input-closed-socket', { error });
+        this.emit('close', {
+          reason: 'WebSocket closed before audio could be sent.',
+          code: 1006,
+          wasClean: false,
+        });
+        return;
+      }
       log('error', 'send-realtime-input-failed', { error });
       this.emit('error', error);
     }
@@ -351,7 +367,7 @@ export class GenAILiveClient extends EventEmitter {
       });
       return;
     }
-    const turns = Array.isArray(parts) ? parts : [parts];
+    const turns = (Array.isArray(parts) ? parts : [parts]).map(normalizeClientContentTurn);
     log('info', 'send-client-content', {
       turnComplete,
       turnCount: turns.length,

@@ -2,6 +2,10 @@ process.env.DATABASE_URL ||= 'postgres://user:pass@localhost:5432/bloom_test';
 process.env.GOOGLE_CLIENT_ID ||= 'test-google-client';
 process.env.APP_JWT_SECRET ||= 'test-secret';
 process.env.GEMINI_API_KEY ||= 'test-gemini-key';
+process.env.GEMINI_MODEL = 'gemini-2.5-pro';
+delete process.env.GEMINI_ANALYSIS_MODEL;
+delete process.env.GEMINI_ANALYSIS_FALLBACK_MODEL;
+delete process.env.GEMINI_ANALYSIS_MODEL_ROTATION;
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

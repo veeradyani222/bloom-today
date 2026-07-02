@@ -242,8 +242,37 @@
 
 .rsp-google-wrap {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 12px;
   width: 100%;
+}
+
+.rsp-dev-login-btn {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid #7b956c;
+  border-radius: 999px;
+  background: #f7fbf3;
+  color: #31452b;
+  font-family: 'Oswald', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rsp-dev-login-btn:hover:not(:disabled) {
+  background: #eef7e8;
+  transform: translateY(-1px);
+}
+
+.rsp-dev-login-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .rsp-continue-btn {

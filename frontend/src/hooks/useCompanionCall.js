@@ -8,6 +8,7 @@ import {
 import { AudioRecorder } from '../lib/live-api/audio-recorder';
 import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
+import { LOW_LATENCY_REPLY_INSTRUCTION } from '../lib/live-api/live-config.js';
 import { registerLiveClientListeners } from '../lib/live-api/client-listeners';
 import { callDebug, startCallDebugSession } from '../lib/live-api/call-debug.js';
 import { audioContext } from '../lib/live-api/utils';
@@ -180,7 +181,7 @@ export function useCompanionCall({
         `You are ${companionName}, a warm and caring postpartum support companion for ${userName}.`,
         'This is a live phone call. Speak naturally, warmly, and conversationally — like a close friend who truly cares.',
         'When the call begins, immediately open with a warm, brief greeting by name — do not wait for the user to speak first.',
-        'Keep responses at 2 to 4 sentences. Be warm and substantive but never monologue.',
+        LOW_LATENCY_REPLY_INSTRUCTION,
         'If the topic is deep or emotional, give a meaningful reply with genuine care.',
         'If the user interrupts you, stop immediately. Only respond to the LATEST thing they said. Do NOT resume or reference what you were saying before.',
         'CRITICAL: After interruption, produce ONLY ONE short response. Do not produce multiple responses.',

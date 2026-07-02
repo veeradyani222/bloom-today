@@ -25,6 +25,8 @@ export function RoleSelectionPage({
   loading = false,
   error: externalError = '',
   onRoleGoogleSignIn,
+  onDevAdminSignIn,
+  showDevAdminLogin = false,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -347,6 +349,16 @@ export function RoleSelectionPage({
                 ) : (
                   <div className="rsp-google-wrap">
                     <GoogleButton onCredential={handleRoleCredential} disabled={loading} />
+                    {showDevAdminLogin ? (
+                      <button
+                        type="button"
+                        className="rsp-dev-login-btn"
+                        onClick={onDevAdminSignIn}
+                        disabled={loading}
+                      >
+                        Continue as Dev Admin
+                      </button>
+                    ) : null}
                   </div>
                 )
               )}

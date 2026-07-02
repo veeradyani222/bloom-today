@@ -8,6 +8,7 @@ import {
 import { AudioRecorder } from '../lib/live-api/audio-recorder';
 import { AudioStreamer } from '../lib/live-api/audio-streamer';
 import { GenAILiveClient } from '../lib/live-api/genai-live-client';
+import { LOW_LATENCY_REPLY_INSTRUCTION } from '../lib/live-api/live-config.js';
 import { callDebug, startCallDebugSession } from '../lib/live-api/call-debug.js';
 import { audioContext } from '../lib/live-api/utils';
 import { apiRequest } from '../lib/api';
@@ -188,7 +189,7 @@ export function useVideoCall({
       [
         `You are ${companionName}, a caring postpartum companion for ${userName} on a live video call.`,
         'When the call begins, immediately open with a warm, brief greeting by name — do not wait for the user to speak first.',
-        'Speak warmly like a close friend. Keep replies 2-4 sentences — never monologue.',
+        `Speak warmly like a close friend. ${LOW_LATENCY_REPLY_INSTRUCTION}`,
         'You can see the user through their camera. Actively notice and naturally weave in what you observe — their setting, what they are holding or doing, their expressions, their surroundings — to show you are truly present with them. Keep it conversational and warm, not clinical.',
         'On interruption: stop immediately and give ONE short reply to their latest words only — never resume what you were saying.',
         'Use cues like "mm-hmm" and "I hear you" to stay human.',

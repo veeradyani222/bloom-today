@@ -7,7 +7,9 @@ import { endCallAndNavigateImmediately } from './callNavigation';
 import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
+import { resolveTalkingHeadAvatarId } from '../lib/talkinghead/avatarSelection';
 import { createGestureMapper } from '../lib/gestureMapper';
+import { resolveCompanionVoiceName } from '../lib/companionProfile';
 import companionBg from '../assets/companion_bg.png';
 import './VideoCallPage.css';
 
@@ -18,7 +20,7 @@ export function VideoCallPage({ token, session }) {
   const [requiresTapToStart] = useState(() => isLikelySafariBrowser());
 
   const companionName = session?.user?.companion_name || session?.user?.companionName || 'Companion';
-  const companionVoiceName = session?.user?.companion_voice || session?.user?.companionVoice || 'Aoede';
+  const companionVoiceName = resolveCompanionVoiceName(session?.user);
   const therapistInstruction = session?.user?.companion?.therapist_instructions || '';
   const companionInstructions = [
     session?.user?.companion_instructions || session?.user?.companionInstructions || '',
@@ -27,7 +29,9 @@ export function VideoCallPage({ token, session }) {
     .filter(Boolean)
     .join('\n');
   const userMemories = session?.user?.memories || [];
-  const companionAvatarId = session?.user?.companion_avatar_id || session?.user?.companionAvatarId || 'brunette';
+  const companionAvatarId = resolveTalkingHeadAvatarId(
+    session?.user?.companion_avatar_id || session?.user?.companionAvatarId,
+  );
   const userName = session?.user?.full_name?.split(' ')[0] || session?.user?.name || 'there';
 
   /* ── Hook ── */

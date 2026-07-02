@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { apiRequest } from './lib/api';
+import { requestDevAdminSession, shouldShowDevAdminLogin } from './lib/devAuth';
 import { getCallBrowserSupport } from './lib/mediaPermissions';
 import './index.css';
 
@@ -58,9 +59,17 @@ function CallBrowserGate({ children }) {
   return children;
 }
 
-function SessionLandingGate({ session, sessionReady, onGoogleSignIn, loading, error }) {
+function SessionLandingGate({ session, sessionReady, onGoogleSignIn, onDevAdminSignIn, showDevAdminLogin, loading, error }) {
   if (!session?.accessToken) {
-    return <LandingPage onGoogleSignIn={onGoogleSignIn} loading={loading} error={error} />;
+    return (
+      <LandingPage
+        onGoogleSignIn={onGoogleSignIn}
+        onDevAdminSignIn={onDevAdminSignIn}
+        showDevAdminLogin={showDevAdminLogin}
+        loading={loading}
+        error={error}
+      />
+    );
   }
 
   if (!sessionReady) {
@@ -83,6 +92,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [sessionReady, setSessionReady] = useState(false);
+  const showDevAdminLogin = shouldShowDevAdminLogin();
 
   const token = useMemo(() => session?.accessToken || '', [session]);
 
@@ -169,6 +179,40 @@ function App() {
     }
   }
 
+  async function handleDevAdminSignIn() {
+    setAuthLoading(true);
+    setAuthError('');
+
+    try {
+      const data = await requestDevAdminSession();
+      const nextSession = {
+        accessToken: data.accessToken,
+        user: data.user,
+        actor: data.actor || null,
+      };
+      setSession(nextSession);
+      saveSession(nextSession);
+      window.pendo?.identify({
+        visitor: {
+          id: data.user.id,
+          email: data.user.email || '',
+          full_name: data.user.full_name || '',
+          onboarding_completed: data.user.onboarding_completed || false,
+          created_at: data.user.created_at || '',
+          preferred_dashboard_role: data.user.preferred_dashboard_role || '',
+          companion_name: data.user.companion_name || '',
+          companion_avatar_id: data.user.companion_avatar_id || '',
+          companion_voice_name: data.user.companion_voice_name || '',
+        }
+      });
+      navigate(getPostLoginRoute(data.user));
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function handleRoleGoogleSignIn({ credential, role, supportKey }) {
     setAuthLoading(true);
     setAuthError('');
@@ -221,6 +265,8 @@ function App() {
             session={session}
             sessionReady={sessionReady}
             onGoogleSignIn={handleGoogleSignIn}
+            onDevAdminSignIn={handleDevAdminSignIn}
+            showDevAdminLogin={showDevAdminLogin}
             loading={authLoading}
             error={authError}
           />
@@ -251,6 +297,8 @@ function App() {
             loading={authLoading}
             error={authError}
             onRoleGoogleSignIn={handleRoleGoogleSignIn}
+            onDevAdminSignIn={handleDevAdminSignIn}
+            showDevAdminLogin={showDevAdminLogin}
           />
         }
       />

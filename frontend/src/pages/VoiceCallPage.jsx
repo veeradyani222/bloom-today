@@ -7,7 +7,9 @@ import { endCallAndNavigateImmediately } from './callNavigation';
 import { isLikelySafariBrowser } from '../lib/mediaPermissions';
 import { TalkingHead } from '../lib/talkinghead/modules/talkinghead.mjs';
 import { talkingHeadAvatarPresets } from '../lib/talkinghead/avatarPresets';
+import { resolveTalkingHeadAvatarId } from '../lib/talkinghead/avatarSelection';
 import { createGestureMapper } from '../lib/gestureMapper';
+import { resolveCompanionVoiceName } from '../lib/companionProfile';
 import './VoiceCallPage.css';
 
 /* ── Simple audio visualiser bars ── */
@@ -40,7 +42,7 @@ export function VoiceCallPage({ token, session }) {
   const userName = session?.user?.full_name || 'there';
   const firstName = userName.split(' ')[0];
   const companionName = session?.user?.companion_name || session?.user?.companionName || 'Luna';
-  const companionVoiceName = session?.user?.companion_voice_name || session?.user?.companionVoiceName || 'Aoede';
+  const companionVoiceName = resolveCompanionVoiceName(session?.user);
   const therapistInstruction = session?.user?.companion?.therapist_instructions || '';
   const companionInstructions = [
     session?.user?.companion_instructions || session?.user?.companionInstructions || '',
@@ -49,7 +51,9 @@ export function VoiceCallPage({ token, session }) {
     .filter(Boolean)
     .join('\n');
   const userMemories = session?.user?.memories || [];
-  const companionAvatarId = session?.user?.companion_avatar_id || session?.user?.companionAvatarId || 'brunette';
+  const companionAvatarId = resolveTalkingHeadAvatarId(
+    session?.user?.companion_avatar_id || session?.user?.companionAvatarId,
+  );
 
   /* ── Avatar Rendering ── */
   const avatarContainerRef = useRef(null);

@@ -6,6 +6,7 @@ const { z } = require('zod');
 const { config } = require('./config');
 const { pool } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
+const { buildDevAdminSession, isDevAdminAuthEnabled, upsertDevAdminUser } = require('./devAuth');
 const { generateShareKey } = require('./utils/codes');
 const { getOnboardingErrorResponse } = require('./onboardingErrors');
 const { createGoogleAdkCompanion, runCompanionTurn } = require('./services/googleAdk');
@@ -452,6 +453,20 @@ app.post('/api/auth/google-role', async (req, res) => {
     }
     console.error('[AUTH] role_login_error', error);
     return res.status(500).json({ error: 'Role login failed.' });
+  }
+});
+
+app.post('/api/auth/dev-admin', async (_req, res) => {
+  if (!isDevAdminAuthEnabled()) {
+    return res.status(404).json({ error: 'Not found.' });
+  }
+
+  try {
+    const user = await upsertDevAdminUser(pool);
+    return res.json(buildDevAdminSession(user, config.jwtSecret));
+  } catch (error) {
+    console.error('[AUTH] dev_admin_login_error', error);
+    return res.status(500).json({ error: 'Dev admin login failed.' });
   }
 });
 

@@ -47,7 +47,13 @@ const features = [
   },
 ];
 
-export function LandingPage({ onGoogleSignIn, loading, error }) {
+export function LandingPage({
+  onGoogleSignIn,
+  onDevAdminSignIn,
+  showDevAdminLogin = false,
+  loading,
+  error,
+}) {
   if (loading) {
     return (
       <main className="landing-loading-screen">
@@ -82,6 +88,16 @@ export function LandingPage({ onGoogleSignIn, loading, error }) {
 
             <div className="landing-hero__actions" id="signup">
               <GoogleButton onCredential={onGoogleSignIn} disabled={loading} />
+              {showDevAdminLogin ? (
+                <button
+                  type="button"
+                  className="landing-dev-login"
+                  onClick={onDevAdminSignIn}
+                  disabled={loading}
+                >
+                  Continue as Dev Admin
+                </button>
+              ) : null}
             </div>
 
             {error && <p className="landing-error-banner">{error}</p>}
@@ -114,6 +130,16 @@ export function LandingPage({ onGoogleSignIn, loading, error }) {
         </p>
         <div className="landing-final-cta__actions">
           <GoogleButton onCredential={onGoogleSignIn} disabled={loading} />
+          {showDevAdminLogin ? (
+            <button
+              type="button"
+              className="landing-dev-login"
+              onClick={onDevAdminSignIn}
+              disabled={loading}
+            >
+              Continue as Dev Admin
+            </button>
+          ) : null}
         </div>
       </section>
 
