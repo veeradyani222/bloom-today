@@ -59,11 +59,12 @@ function CallBrowserGate({ children }) {
   return children;
 }
 
-function SessionLandingGate({ session, sessionReady, onGoogleSignIn, onDevAdminSignIn, showDevAdminLogin, loading, error }) {
+function SessionLandingGate({ session, sessionReady, onGoogleSignIn, onGuestSignIn, onDevAdminSignIn, showDevAdminLogin, loading, error }) {
   if (!session?.accessToken) {
     return (
       <LandingPage
         onGoogleSignIn={onGoogleSignIn}
+        onGuestSignIn={onGuestSignIn}
         onDevAdminSignIn={onDevAdminSignIn}
         showDevAdminLogin={showDevAdminLogin}
         loading={loading}
@@ -179,6 +180,44 @@ function App() {
     }
   }
 
+  async function handleGuestSignIn() {
+    setAuthLoading(true);
+    setAuthError('');
+
+    try {
+      const data = await apiRequest('/api/auth/guest', {
+        method: 'POST',
+        body: {},
+      });
+
+      const nextSession = {
+        accessToken: data.accessToken,
+        user: data.user,
+        actor: data.actor || null,
+      };
+      setSession(nextSession);
+      saveSession(nextSession);
+      window.pendo?.identify({
+        visitor: {
+          id: data.user.id,
+          email: data.user.email || '',
+          full_name: data.user.full_name || '',
+          onboarding_completed: data.user.onboarding_completed || false,
+          created_at: data.user.created_at || '',
+          preferred_dashboard_role: data.user.preferred_dashboard_role || '',
+          companion_name: data.user.companion_name || '',
+          companion_avatar_id: data.user.companion_avatar_id || '',
+          companion_voice_name: data.user.companion_voice_name || '',
+        }
+      });
+      navigate(getPostLoginRoute(data.user));
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function handleDevAdminSignIn() {
     setAuthLoading(true);
     setAuthError('');
@@ -265,6 +304,7 @@ function App() {
             session={session}
             sessionReady={sessionReady}
             onGoogleSignIn={handleGoogleSignIn}
+            onGuestSignIn={handleGuestSignIn}
             onDevAdminSignIn={handleDevAdminSignIn}
             showDevAdminLogin={showDevAdminLogin}
             loading={authLoading}

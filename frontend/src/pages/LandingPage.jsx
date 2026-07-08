@@ -49,6 +49,7 @@ const features = [
 
 export function LandingPage({
   onGoogleSignIn,
+  onGuestSignIn,
   onDevAdminSignIn,
   showDevAdminLogin = false,
   loading,
@@ -88,6 +89,16 @@ export function LandingPage({
 
             <div className="landing-hero__actions" id="signup">
               <GoogleButton onCredential={onGoogleSignIn} disabled={loading} />
+              {onGuestSignIn ? (
+                <button
+                  type="button"
+                  className="landing-guest-login"
+                  onClick={onGuestSignIn}
+                  disabled={loading}
+                >
+                  Continue as guest
+                </button>
+              ) : null}
               {showDevAdminLogin ? (
                 <button
                   type="button"
@@ -130,6 +141,16 @@ export function LandingPage({
         </p>
         <div className="landing-final-cta__actions">
           <GoogleButton onCredential={onGoogleSignIn} disabled={loading} />
+          {onGuestSignIn ? (
+            <button
+              type="button"
+              className="landing-guest-login"
+              onClick={onGuestSignIn}
+              disabled={loading}
+            >
+              Continue as guest
+            </button>
+          ) : null}
           {showDevAdminLogin ? (
             <button
               type="button"

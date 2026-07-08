@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -467,6 +468,55 @@ app.post('/api/auth/dev-admin', async (_req, res) => {
   } catch (error) {
     console.error('[AUTH] dev_admin_login_error', error);
     return res.status(500).json({ error: 'Dev admin login failed.' });
+  }
+});
+
+// Passwordless guest login. Anyone can use this (works in production too).
+// Every call provisions a brand-new user with a fresh identity, so each guest
+// goes through role selection + onboarding from scratch.
+app.post('/api/auth/guest', async (_req, res) => {
+  try {
+    console.log('[AUTH] guest_login_start');
+
+    const guestId = crypto.randomUUID();
+    const googleSub = `guest:${guestId}`;
+    const email = `guest-${guestId}@guest.bloom.local`;
+
+    const insert = await pool.query(
+      `
+      INSERT INTO users (google_sub, email, share_key, therapist_share_key, trusted_share_key)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, email, full_name, avatar_url, onboarding_completed,
+                companion_name, companion_instructions, companion_agent_id,
+                companion_session_id, companion_avatar_id, companion_voice_name,
+                share_key, therapist_share_key, trusted_share_key,
+                preferred_dashboard_role, onboarding_assessment;
+      `,
+      [googleSub, email, generateShareKey(), generateShareKey(), generateShareKey()],
+    );
+
+    const actor = insert.rows[0];
+
+    const accessToken = jwt.sign(
+      {
+        userId: actor.id,
+        email: actor.email,
+        authRole: 'mom',
+      },
+      config.jwtSecret,
+      { expiresIn: '7d' },
+    );
+
+    console.log(`[AUTH] guest_login_ok userId=${actor.id}`);
+
+    return res.json({
+      accessToken,
+      user: { ...actor, auth_role: 'mom', is_guest: true },
+      actor: null,
+    });
+  } catch (error) {
+    console.error('[AUTH] guest_login_error', error);
+    return res.status(500).json({ error: 'Guest login failed.' });
   }
 });
 
